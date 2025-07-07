@@ -51,8 +51,11 @@ rustc +nightly-2024-05-20 --version
 ```
 
 Deberías ver algo así:
+
+```sh
 cargo-contract-contract 4.1.3-unknown-x86_64-pc-windows-msvc
 rustc 1.80.0-nightly (d84b90375 2024-05-19)
+```
 
 ### 4. Compilar los contratos
 
