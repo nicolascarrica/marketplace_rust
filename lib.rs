@@ -1,8 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-
+mod types;
 #[ink::contract]
 mod market_place {
-    use ink::{storage::Mapping, xcm::{v2::Junction::AccountId32, v3::Junction::AccountId32}};
+    use ink::{
+        storage::Mapping,
+        xcm::{v2::Junction::AccountId32, v3::Junction::AccountId32},
+    };
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
@@ -10,56 +13,54 @@ mod market_place {
     pub struct MarketPlace {
         /// Stores a single `bool` value on the storage.
         value: bool,
-        usuarios: Mapping<AccountId, Usuario>, //aca seria id?
-        productos:Mapping<AccountId, Balance>, //no deberia ser un vec donde solo guarde los productos, porque el producto ya tiene su stock
-        ordenes:Mapping<AccountId, Balance>, //lo mismo
-        publicaciones:Mapping<AccountId, Publicacion>,
-        productos_por_usuario:Mapping<AccountId, Producto>,
+        usuarios: Mapping<AccountId, Usuario>,  //aca seria id?
+        productos: Mapping<AccountId, Balance>, //no deberia ser un vec donde solo guarde los productos, porque el producto ya tiene su stock
+        ordenes: Mapping<AccountId, Balance>,   //lo mismo
+        publicaciones: Mapping<AccountId, Publicacion>,
+        productos_por_usuario: Mapping<AccountId, Producto>,
         contador_ordenes: u64,
-        contador_productos:u64,
+        contador_productos: u64,
         //aca iria lo de reputacion, creo
     }
 
-    pub struct Usuario{
-        username:String,
-        rol:Rol,
-        id:AccountId32,
+    pub struct Usuario {
+        username: String,
+        rol: Rol,
+        id: AccountId32,
         calificaciones: Vec<Calificacion>, //creo que seria solo uno, porque ya el usuario sabe quien es, por ende no tiene sentido tener 2 vec o no??
-        verificacion:bool,
+        verificacion: bool,
     }
 
-    pub struct Calificacion{
-        id:AccountId32, //o usuario para verificar que solo califico una vez y no mas 
-        puntaje:u8,
-        id_orden:u64,
+    pub struct Calificacion {
+        id: AccountId32, //o usuario para verificar que solo califico una vez y no mas
+        puntaje: u8,
+        id_orden: u64,
     }
 
-    pub struct Producto{
-        id:AccountId32,
-        nombre:String,
-        descripcion:String,
-        precio:u32,
-        stock:u32,
-        categoria:Categoria,
-
+    pub struct Producto {
+        id: AccountId32,
+        nombre: String,
+        descripcion: String,
+        precio: u32,
+        stock: u32,
+        categoria: Categoria,
     }
 
-    pub struct Publicacion{
-        id:AccountId32, //quien lo publica
-        productos:Mapping<u32, Producto>, //la cantidad de productos y el producto, tenia algo mas?? 
-
+    pub struct Publicacion {
+        id: AccountId32,                   //quien lo publica
+        productos: Mapping<u32, Producto>, //la cantidad de productos y el producto, tenia algo mas??
     }
 
-    pub struct Orden{
-        id:u64,
+    pub struct Orden {
+        id: u64,
         productos: Mapping<u32, Producto>, //lo dejamos asi??
-        estado:Estado,
+        estado: Estado,
     }
 
     pub enum Rol {
         Comprador,
         Vendedor,
-        Ambos
+        Ambos,
     }
 
     pub enum Categoria {
@@ -67,16 +68,15 @@ mod market_place {
         Indumentaria,
         Hogar,
         Alimentos,
-        Otros
+        Otros,
     }
 
     pub enum Estado {
         Pendiente,
         Enviado,
         Recibido,
-        Cancelada
+        Cancelada,
     }
-
 
     impl MarketPlace {
         /// Constructor that initializes the `bool` value to the given `init_value`.
@@ -134,7 +134,6 @@ mod market_place {
         }
     }
 
-
     /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
     ///
     /// When running these you need to make sure that you:
@@ -151,7 +150,6 @@ mod market_place {
 
         /// The End-to-End test `Result` type.
         type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
 
         /// We test that we can upload and instantiate the contract using its default constructor.
         #[ink_e2e::test]
