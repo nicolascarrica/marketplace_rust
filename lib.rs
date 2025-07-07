@@ -16,15 +16,24 @@ mod market_place {
     /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct MarketPlace {
-        usuarios: Mapping<AccountId, Usuario>,  //aca seria id?
-        productos: Mapping<AccountId, Balance>, //no deberia ser un vec donde solo guarde los productos, porque el producto ya tiene su stock
-        ordenes: Mapping<AccountId, Balance>,   //lo mismo
-        publicaciones: Mapping<u32, Publicacion>,
+        usuarios: Mapping<AccountId, Usuario>,  
+        productos: Mapping<u32, Producto>, 
+        ordenes: Mapping<u32, Orden>,  
+        publicaciones: Mapping<AccountId, Publicacion>,
         productos_por_usuario: Mapping<AccountId, Producto>,
         contador_ordenes: u32,
         contador_productos: u32,
         //aca iria lo de reputacion, creo
     }
+
+    pub struct Usuario {
+        username: String,
+        rol: Rol,
+        id: AccountId,
+        calificaciones: Vec<Calificacion>, 
+        verificacion: bool,
+    }
+
 
     pub struct Calificacion {
         id: AccountId, //o usuario para verificar que solo califico una vez y no mas
@@ -33,13 +42,68 @@ mod market_place {
     }
 
     pub struct Producto {
-        id: AccountId,
+        id: u32, //id del producto
         nombre: String,
         descripcion: String,
         precio: u32,
         stock: u32,
         categoria: Categoria,
     }
+
+
+    pub struct Publicacion {
+         id_publicacion: u32,       // ID de la publicación
+         id_vendedor: AccountId,    // ID del vendedor
+         producto: Producto, //lo podriamos poner asi, directamente
+         estado: EstadoPublicacion, // Estado de la publicación
+         fecha_publicacion: u64,    // Fecha de publicación (timestamp, as UNIX timestamp)
+    }
+
+    pub struct Orden {
+        id: u32, //id de la orden
+        productos: Mapping<u32, Producto>, //(cantidad, producto)
+        estado: Estado,
+    }
+
+    pub enum Rol {
+        Comprador,
+        Vendedor,
+        Ambos,
+    }
+
+    pub enum Categoria {
+        Tecnologia,
+        Indumentaria,
+        Hogar,
+        Alimentos,
+        Otros,
+    }
+
+    pub enum Estado {
+        Pendiente,
+        Enviado,
+        Recibido,
+        Cancelada,
+    }
+
+    pub enum EstadoPublicacion {
+        Activa,
+        Pausada,
+        Eliminada,
+        Agotada,
+    }
+    impl Usuario {
+        pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
+            Self {
+                username,
+                rol,
+                id,
+                calificaciones: Vec::new(),
+                verificacion: true,
+            }
+        }
+    }
+
 
     pub struct Orden {
         id: u32,
