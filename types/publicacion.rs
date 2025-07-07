@@ -6,7 +6,7 @@ use ink::scale::{Decode, Encode};
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 #[cfg_attr(feature = "std", derive(ink::scale_info::TypeInfo))]
 pub struct Publicacion {
-    pub id_publicacion: u64,       // ID de la publicación
+    pub id_publicacion: u32,       // ID de la publicación
     pub id_vendedor: AccountId,    // ID del vendedor
     pub nombre_producto: String,   // Nombre del producto
     pub descripcion: String,       // Descripción del producto
@@ -19,7 +19,7 @@ pub struct Publicacion {
 
 impl Publicacion {
     pub fn new(
-        id_publicacion: u64,
+        id_publicacion: u32,
         id_vendedor: AccountId,
         nombre_producto: String,
         descripcion: String,

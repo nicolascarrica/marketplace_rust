@@ -19,17 +19,17 @@ mod market_place {
         usuarios: Mapping<AccountId, Usuario>,  //aca seria id?
         productos: Mapping<AccountId, Balance>, //no deberia ser un vec donde solo guarde los productos, porque el producto ya tiene su stock
         ordenes: Mapping<AccountId, Balance>,   //lo mismo
-        publicaciones: Mapping<u64, Publicacion>,
+        publicaciones: Mapping<u32, Publicacion>,
         productos_por_usuario: Mapping<AccountId, Producto>,
-        contador_ordenes: u64,
-        contador_productos: u64,
+        contador_ordenes: u32,
+        contador_productos: u32,
         //aca iria lo de reputacion, creo
     }
 
     pub struct Calificacion {
         id: AccountId, //o usuario para verificar que solo califico una vez y no mas
         puntaje: u8,
-        id_orden: u64,
+        id_orden: u32,
     }
 
     pub struct Producto {
@@ -42,7 +42,7 @@ mod market_place {
     }
 
     pub struct Orden {
-        id: u64,
+        id: u32,
         productos: Mapping<u32, Producto>, //lo dejamos asi??
         estado: Estado,
     }
@@ -98,7 +98,7 @@ mod market_place {
                 .get(&id)
                 .ok_or_else(|| "Usuario no encontrado".to_string())
         }
-        //Helper verificar que el usuaro tenga el rol correcto
+        //Helper verificar que el usuario tenga el rol correcto
         fn verificar_rol(&self, id: AccountId) -> Result<(), String> {
             let usuario = self.verificar_usuario(id)?;
             if usuario.rol == Rol::Ambos || usuario.rol == Rol::Vendedor {
@@ -132,7 +132,7 @@ mod market_place {
             Ok(())
         }
         //Helper para obtener una publicacion por id
-        fn obtener_publicacion(&self, id_publicacion: u64) -> Result<Publicacion, String> {
+        fn obtener_publicacion(&self, id_publicacion: u32) -> Result<Publicacion, String> {
             self.publicaciones
                 .get(&id_publicacion)
                 .ok_or_else(|| "Publicación no encontrada".to_string())
@@ -140,7 +140,7 @@ mod market_place {
         //Helper para verificar que el usuario es el owner de la publicacion
         fn verificar_owner_publicacion(
             &self,
-            id_publicacion: u64,
+            id_publicacion: u32,
             id_vendedor: AccountId,
         ) -> Result<(), String> {
             let publicacion = self.obtener_publicacion(id_publicacion)?;
@@ -189,7 +189,7 @@ mod market_place {
         #[ink(message)]
         pub fn actualizar_stock(
             &mut self,
-            id_publicacion: u64,
+            id_publicacion: u32,
             nuevo_stock: u32,
         ) -> Result<(), String> {
             let caller = self.env().caller();
@@ -208,7 +208,7 @@ mod market_place {
         #[ink(message)]
         pub fn cambiar_estado_publicacion(
             &mut self,
-            id_publicacion: u64,
+            id_publicacion: u32,
             nuevo_estado: EstadoPublicacion,
         ) -> Result<(), String> {
             let caller = self.env().caller();
