@@ -1,3 +1,4 @@
 target/
 **/*.contract
 **/*.wasm
+Cargo.lock
