@@ -111,6 +111,7 @@ mod market_place {
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
     /// module and test functions are marked with a `#[test]` attribute.
     /// The below code is technically just normal Rust code.
+    //TEST PRIVADOS (DE LAS FUNCIONES AUXILIARES POR ASI DECIRLO)
     #[cfg(test)]
     mod tests {
         /// Imports all the definitions from the outer scope so we can use them here.
@@ -139,6 +140,7 @@ mod market_place {
     /// When running these you need to make sure that you:
     /// - Compile the tests with the `e2e-tests` feature flag enabled (`--features e2e-tests`)
     /// - Are running a Substrate node which contains `pallet-contracts` in the background
+    //TEST DE LAS FUNCIONES QUE DESPLEGAMOS EN EL CONTRATO COMO REGISTRAR USUARIO
     #[cfg(all(test, feature = "e2e-tests"))]
     mod e2e_tests {
         /// Imports all the definitions from the outer scope so we can use them here.
