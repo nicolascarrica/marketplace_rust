@@ -34,7 +34,7 @@ Crear un archivo rust-toolchain.toml en la raíz del proyecto con el siguiente c
 
 ```toml
 [toolchain]
-channel = "nightly-2024-05-20"
+channel = "nightly"
 ```
 
 ### 2. Instalar cargo-contract
