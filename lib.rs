@@ -130,6 +130,7 @@ mod market_place {
             self.usuarios.insert(caller, &usuario); //se debe actualizar en el map
             true
         }
+        //
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
