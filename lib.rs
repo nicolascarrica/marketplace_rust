@@ -125,9 +125,7 @@ mod market_place {
                 return Err("El precio del producto debe ser mayor a 0".to_string());
             }
             if nombre.is_empty() || nombre.trim().is_empty() {
-                return Err(
-                    "El nombre y la descripción del producto no pueden estar vacíos".to_string(),
-                );
+                return Err("El nombre del producto no puede estar vacío".to_string());
             }
             Ok(())
         }
