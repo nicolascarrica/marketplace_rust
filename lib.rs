@@ -2,64 +2,63 @@
 
 #[ink::contract]
 mod market_place {
-    use ink::{storage::Mapping, xcm::{v2::Junction::AccountId32, v3::Junction::AccountId32}};
+    use ink::{
+        storage::Mapping,
+        xcm::{v2::Junction::AccountId32, v3::Junction::AccountId32, v4::Junction::AccountKey20},
+    };
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct MarketPlace {
-        /// Stores a single `bool` value on the storage.
-        value: bool,
-        usuarios: Mapping<AccountId, Usuario>, //aca seria id?
-        productos:Mapping<AccountId, Balance>, //no deberia ser un vec donde solo guarde los productos, porque el producto ya tiene su stock
-        ordenes:Mapping<AccountId, Balance>, //lo mismo
-        publicaciones:Mapping<AccountId, Publicacion>,
-        productos_por_usuario:Mapping<AccountId, Producto>,
+        usuarios: Mapping<AccountId, Usuario>,  //aca seria id?
+        productos: Mapping<AccountId, Balance>, //no deberia ser un vec donde solo guarde los productos, porque el producto ya tiene su stock
+        ordenes: Mapping<AccountId, Balance>,   //lo mismo
+        publicaciones: Mapping<AccountId, Publicacion>,
+        productos_por_usuario: Mapping<AccountId, Producto>,
         contador_ordenes: u64,
-        contador_productos:u64,
+        contador_productos: u64,
         //aca iria lo de reputacion, creo
     }
 
-    pub struct Usuario{
-        username:String,
-        rol:Rol,
-        id:AccountId32,
+    pub struct Usuario {
+        username: String,
+        rol: Rol,
+        id: AccountId,
         calificaciones: Vec<Calificacion>, //creo que seria solo uno, porque ya el usuario sabe quien es, por ende no tiene sentido tener 2 vec o no??
-        verificacion:bool,
+        verificacion: bool,
     }
 
-    pub struct Calificacion{
-        id:AccountId32, //o usuario para verificar que solo califico una vez y no mas 
-        puntaje:u8,
-        id_orden:u64,
+    pub struct Calificacion {
+        id: AccountId, //o usuario para verificar que solo califico una vez y no mas
+        puntaje: u8,
+        id_orden: u64,
     }
 
-    pub struct Producto{
-        id:AccountId32,
-        nombre:String,
-        descripcion:String,
-        precio:u32,
-        stock:u32,
-        categoria:Categoria,
-
+    pub struct Producto {
+        id: AccountId,
+        nombre: String,
+        descripcion: String,
+        precio: u32,
+        stock: u32,
+        categoria: Categoria,
     }
 
-    pub struct Publicacion{
-        id:AccountId32, //quien lo publica
-        productos:Mapping<u32, Producto>, //la cantidad de productos y el producto, tenia algo mas?? 
-
+    pub struct Publicacion {
+        id: AccountId,                     //quien lo publica
+        productos: Mapping<u32, Producto>, //la cantidad de productos y el producto, tenia algo mas??
     }
 
-    pub struct Orden{
-        id:u64,
+    pub struct Orden {
+        id: u64,
         productos: Mapping<u32, Producto>, //lo dejamos asi??
-        estado:Estado,
+        estado: Estado,
     }
 
     pub enum Rol {
         Comprador,
         Vendedor,
-        Ambos
+        Ambos,
     }
 
     pub enum Categoria {
@@ -67,51 +66,75 @@ mod market_place {
         Indumentaria,
         Hogar,
         Alimentos,
-        Otros
+        Otros,
     }
 
     pub enum Estado {
         Pendiente,
         Enviado,
         Recibido,
-        Cancelada
+        Cancelada,
     }
 
+    impl Usuario {
+        pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
+            Self {
+                username,
+                rol,
+                id,
+                calificaciones: Vec::new(),
+                verificacion: true,
+            }
+        }
+    }
 
     impl MarketPlace {
-        /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
-        pub fn new(init_value: bool) -> Self {
-            //Self { value: init_value }
+        ///aca modificariamos si pasamos a vec o no
+        pub fn new() -> Self {
+            Self {
+                usuarios: Mapping::default(),
+                productos: Mapping::default(),
+                publicaciones: Mapping::default(),
+                productos_por_usuario: Mapping::default(),
+                ordenes: Mapping::default(),
+                contador_ordenes: 0,
+                contador_productos: 0,
+            }
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
-        #[ink(constructor)]
-        pub fn default() -> Self {
-            Self::new(Default::default())
-        }
-
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
         #[ink(message)]
-        pub fn flip(&mut self) {
-            self.value = !self.value;
+        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), String> {
+            ///deberiamos ver como manejar el error
+            let caller = self.env().caller(); //id
+
+            if self.usuarios.contains(&caller) {
+                return Err(String::from("El usuario ya está registrado"));
+            }
+
+            let nuevo_usuario = Usuario::new(username, rol, caller);
+            self.usuarios.insert(caller, &nuevo_usuario);
+
+            Ok(()) //no devuelve nada porque solo inserta en el map de sistema
         }
 
-        /// Simply returns the current value of our `bool`.
         #[ink(message)]
-        pub fn get(&self) -> bool {
-            self.value
+        pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> bool { //o que no devuelva nada, todavia no se
+            let caller = self.env().caller();
+            let mut usuario = match self.usuarios.get(caller) {
+                Some(u) => u,
+                None => return false,
+            };
+
+            usuario.rol = nuevo_rol;
+            self.usuarios.insert(caller, &usuario); //se debe actualizar en el map
+            true
         }
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
     /// module and test functions are marked with a `#[test]` attribute.
     /// The below code is technically just normal Rust code.
-    //TEST PRIVADOS (DE LAS FUNCIONES AUXILIARES POR ASI DECIRLO)
     #[cfg(test)]
     mod tests {
         /// Imports all the definitions from the outer scope so we can use them here.
@@ -127,20 +150,18 @@ mod market_place {
         /// We test a simple use case of our contract.
         #[ink::test]
         fn it_works() {
-            let mut MarketPlace = MarketPlace::new(false);
+            let mut MarketPlace = MarketPlace::new();
             assert_eq!(MarketPlace.get(), false);
             MarketPlace.flip();
             assert_eq!(MarketPlace.get(), true);
         }
     }
 
-
     /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
     ///
     /// When running these you need to make sure that you:
     /// - Compile the tests with the `e2e-tests` feature flag enabled (`--features e2e-tests`)
     /// - Are running a Substrate node which contains `pallet-contracts` in the background
-    //TEST DE LAS FUNCIONES QUE DESPLEGAMOS EN EL CONTRATO COMO REGISTRAR USUARIO
     #[cfg(all(test, feature = "e2e-tests"))]
     mod e2e_tests {
         /// Imports all the definitions from the outer scope so we can use them here.
@@ -151,7 +172,6 @@ mod market_place {
 
         /// The End-to-End test `Result` type.
         type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
 
         /// We test that we can upload and instantiate the contract using its default constructor.
         #[ink_e2e::test]
