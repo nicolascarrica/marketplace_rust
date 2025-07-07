@@ -11,9 +11,9 @@ mod market_place {
     /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct MarketPlace {
-        usuarios: Mapping<AccountId, Usuario>,  //aca seria id?
-        productos: Mapping<AccountId, Balance>, //no deberia ser un vec donde solo guarde los productos, porque el producto ya tiene su stock
-        ordenes: Mapping<AccountId, Balance>,   //lo mismo
+        usuarios: Mapping<AccountId, Usuario>,  
+        productos: Mapping<u32, Producto>, 
+        ordenes: Mapping<u32, Orden>,  
         publicaciones: Mapping<AccountId, Publicacion>,
         productos_por_usuario: Mapping<AccountId, Producto>,
         contador_ordenes: u64,
@@ -25,7 +25,7 @@ mod market_place {
         username: String,
         rol: Rol,
         id: AccountId,
-        calificaciones: Vec<Calificacion>, //creo que seria solo uno, porque ya el usuario sabe quien es, por ende no tiene sentido tener 2 vec o no??
+        calificaciones: Vec<Calificacion>, 
         verificacion: bool,
     }
 
@@ -36,7 +36,7 @@ mod market_place {
     }
 
     pub struct Producto {
-        id: AccountId,
+        id: u32, //id del producto
         nombre: String,
         descripcion: String,
         precio: u32,
@@ -45,13 +45,16 @@ mod market_place {
     }
 
     pub struct Publicacion {
-        id: AccountId,                     //quien lo publica
-        productos: Mapping<u32, Producto>, //la cantidad de productos y el producto, tenia algo mas??
+         id_publicacion: u32,       // ID de la publicación
+         id_vendedor: AccountId,    // ID del vendedor
+         producto: Producto, //lo podriamos poner asi, directamente
+         estado: EstadoPublicacion, // Estado de la publicación
+         fecha_publicacion: u64,    // Fecha de publicación (timestamp, as UNIX timestamp)
     }
 
     pub struct Orden {
-        id: u64,
-        productos: Mapping<u32, Producto>, //lo dejamos asi??
+        id: u32, //id de la orden
+        productos: Mapping<u32, Producto>, //(cantidad, producto)
         estado: Estado,
     }
 
@@ -76,6 +79,12 @@ mod market_place {
         Cancelada,
     }
 
+    pub enum EstadoPublicacion {
+        Activa,
+        Pausada,
+        Eliminada,
+        Agotada,
+    }
     impl Usuario {
         pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
             Self {
