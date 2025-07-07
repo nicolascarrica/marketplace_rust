@@ -224,17 +224,10 @@ mod market_place {
         /// Obtener lista de publicaciones de un vendedor por su ID
         #[ink(message)]
         pub fn obtener_publicaciones_por_vendedor(&self, vendedor: AccountId) -> Vec<Publicacion> {
-            let mut publicaciones_vendedor = Vec::new();
-
-            // Iterar sobre todas las publicaciones
-            for i in 1..=self.contador_productos {
-                if let Some(publicacion) = self.publicaciones.get(&i) {
-                    if publicacion.id_vendedor == vendedor {
-                        publicaciones_vendedor.push(publicacion);
-                    }
-                }
-            }
-            publicaciones_vendedor
+            (1..=self.contador_productos)
+                .filter_map(|i| self.publicaciones.get(&i))
+                .filter(|publicacion| publicacion.id_vendedor == vendedor)
+                .collect()
         }
     }
 
