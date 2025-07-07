@@ -26,3 +26,10 @@ pub enum Estado {
     Recibido,
     Cancelada,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[cfg_attr(feature = "std", derive(ink::scale_info::TypeInfo))]
+pub enum EstadoPublicacion {
+    Activa,
+    Inactiva,
+    Pausada,
+}
