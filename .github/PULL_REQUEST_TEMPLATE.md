@@ -25,7 +25,7 @@
 ```sh
 # comandos de ejemplo
 cargo test
-
+```
 ## 📋 Checklist antes de hacer merge
 
 - [ ] He probado los cambios localmente

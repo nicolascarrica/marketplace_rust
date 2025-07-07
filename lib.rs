@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-
+mod types;
 #[ink::contract]
 mod market_place {
     use ink::{
