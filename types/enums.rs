@@ -30,6 +30,7 @@ pub enum Estado {
 #[cfg_attr(feature = "std", derive(ink::scale_info::TypeInfo))]
 pub enum EstadoPublicacion {
     Activa,
-    Inactiva,
     Pausada,
+    Eliminada,
+    Agotada,
 }
