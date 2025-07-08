@@ -1,136 +1,62 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 mod types;
+
 #[ink::contract]
 mod market_place {
-    use ink::{
-        storage::Mapping,
-        xcm::{v2::Junction::AccountId32, v3::Junction::AccountId32, v4::Junction::AccountKey20},
-    };
+    use ink::storage::Mapping;
+    use crate::types::orden::Orden;
+    use crate::types::producto::Producto;
+    use crate::types::usuario::Usuario;
+    use crate::types::errores::ErrorMarketplace;
+    use crate::types::enums::Rol;
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct MarketPlace {
-        usuarios: Mapping<AccountId, Usuario>,  //aca seria id?
-        productos: Mapping<AccountId, Balance>, //no deberia ser un vec donde solo guarde los productos, porque el producto ya tiene su stock
-        ordenes: Mapping<AccountId, Balance>,   //lo mismo
-        publicaciones: Mapping<AccountId, Publicacion>,
-        productos_por_usuario: Mapping<AccountId, Producto>,
+        usuarios: Mapping<AccountId, Usuario>,
+        productos: Mapping<u64, Producto>,
+        ordenes: Mapping<u64, Orden>,
+        productos_por_usuario: Mapping<AccountId, Vec<u64>>,
         contador_ordenes: u64,
-        contador_productos: u64,
-        //aca iria lo de reputacion, creo
+        contador_productos: u64,  
     }
 
-    pub struct Usuario {
-        username: String,
-        rol: Rol,
-        id: AccountId,
-        calificaciones: Vec<Calificacion>, //creo que seria solo uno, porque ya el usuario sabe quien es, por ende no tiene sentido tener 2 vec o no??
-        verificacion: bool,
-    }
-
-    pub struct Calificacion {
-        id: AccountId, //o usuario para verificar que solo califico una vez y no mas
-        puntaje: u8,
-        id_orden: u64,
-    }
-
-    pub struct Producto {
-        id: AccountId,
-        nombre: String,
-        descripcion: String,
-        precio: u32,
-        stock: u32,
-        categoria: Categoria,
-    }
-
-    pub struct Publicacion {
-        id: AccountId,                     //quien lo publica
-        productos: Mapping<u32, Producto>, //la cantidad de productos y el producto, tenia algo mas??
-    }
-
-    pub struct Orden {
-        id: u64,
-        productos: Mapping<u32, Producto>, //lo dejamos asi??
-        estado: Estado,
-    }
-
-    pub enum Rol {
-        Comprador,
-        Vendedor,
-        Ambos,
-    }
-
-    pub enum Categoria {
-        Tecnologia,
-        Indumentaria,
-        Hogar,
-        Alimentos,
-        Otros,
-    }
-
-    pub enum Estado {
-        Pendiente,
-        Enviado,
-        Recibido,
-        Cancelada,
-    }
-
-    impl Usuario {
-        pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
-            Self {
-                username,
-                rol,
-                id,
-                calificaciones: Vec::new(),
-                verificacion: true,
-            }
-        }
-    }
 
     impl MarketPlace {
+        /// Crea una nueva instancia del contrato MarketPlace.
+        /// # Retorna
+        /// Un contrato con mapas vacíos y contadores en cero.
         #[ink(constructor)]
-        ///aca modificariamos si pasamos a vec o no
         pub fn new() -> Self {
-            Self {
-                usuarios: Mapping::default(),
-                productos: Mapping::default(),
-                publicaciones: Mapping::default(),
-                productos_por_usuario: Mapping::default(),
-                ordenes: Mapping::default(),
-                contador_ordenes: 0,
-                contador_productos: 0,
-            }
+         Self {
+                 usuarios: Mapping::default(),
+                 productos: Mapping::default(),
+                 ordenes: Mapping::default(),
+                 productos_por_usuario: Mapping::default(),
+                 contador_ordenes: 0,
+                 contador_productos: 0,            
+             }
         }
+        /// Registra un nuevo usuario en el sistema con su rol.
+        /// # Parámetros
+        /// - `username`: nombre público visible del usuario.
+        /// - `rol`: rol del usuario (Comprador, Vendedor o Ambos).
+        /// # Retorna
+        /// - `Ok(())` si el registro fue exitoso.
+        /// - `Err(ErrorMarketplace::UsuarioYaRegistrado)` si el usuario ya existe.
 
         #[ink(message)]
-        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), String> {
-            ///deberiamos ver como manejar el error
-            let caller = self.env().caller(); //id
-
-            if self.usuarios.contains(&caller) {
-                return Err(String::from("El usuario ya está registrado"));
-            }
-
-            let nuevo_usuario = Usuario::new(username, rol, caller);
-            self.usuarios.insert(caller, &nuevo_usuario);
-
-            Ok(()) //no devuelve nada porque solo inserta en el map de sistema
-        }
-
-        #[ink(message)]
-        pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> bool { //o que no devuelva nada, todavia no se
+        pub fn registrar_usuario(& mut self,username: String, rol: Rol) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
-            let mut usuario = match self.usuarios.get(caller) {
-                Some(u) => u,
-                None => return false,
-            };
-
-            usuario.rol = nuevo_rol;
-            self.usuarios.insert(caller, &usuario); //se debe actualizar en el map
-            true
+            if self.usuarios.contains(caller) {
+                return Err(ErrorMarketplace::UsuarioYaRegistrado);
+            }
+            let nuevo = Usuario::new(username, rol);
+            self.usuarios.insert(caller, &nuevo);
+            Ok(())
         }
-        //
+        
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
