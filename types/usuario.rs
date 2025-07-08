@@ -1,13 +1,15 @@
 use ink::prelude::vec::Vec;
 use ink::primitives::AccountId;
 use ink::scale::{Decode, Encode};
+use ink::storage::traits::StorageLayout;
 
 use crate::types::enums::Rol;
-use crate::types::*;
+use crate::types::calificacion::Calificacion;
+use crate::types::errores::ErrorMarketplace;
 
 
 /// Representa un usuario de la plataforma.
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, StorageLayout)]
 #[cfg_attr(feature = "std", derive(ink::scale_info::TypeInfo))]
 pub struct Usuario {
     pub username: String,
