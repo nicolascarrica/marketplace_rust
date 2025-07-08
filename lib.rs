@@ -1,6 +1,185 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-#[ink::contract]
 
+#[ink::contract]
+mod market_place {
+    use ink::prelude::string::String;
+    use ink::prelude::vec::Vec;
+    use ink::storage::Mapping;
+
+    // Enums
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum Rol {
+        Comprador,
+        Vendedor,
+        Ambos,
+    }
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum Categoria {
+        Tecnologia,
+        Indumentaria,
+        Hogar,
+        Alimentos,
+        Otros,
+    }
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum Estado {
+        Pendiente,
+        Enviado,
+        Recibido,
+        Cancelada,
+    }
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum EstadoPublicacion {
+        Activa,
+        Pausada,
+        Eliminada,
+        Agotada,
+    }
+    #[derive(Debug, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum ErrorOrden {
+        NoEsVendedor,
+        NoEsComprador,
+        EstadoInvalido,
+        CancelacionNoSolicitada,
+        CancelacionYaPendiente,
+        OrdenCancelada,
+        NoAutorizado,
+    }
+
+    // Structs
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct Usuario {
+        pub username: String,
+        pub rol: Rol,
+        pub id: AccountId,
+        pub calificaciones: Vec<Calificacion>,
+        pub verificacion: bool,
+    }
+    impl Usuario {
+        pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
+            Self {
+                username,
+                rol,
+                id,
+                calificaciones: Vec::new(),
+                verificacion: true,
+            }
+        }
+    }
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct Calificacion {
+        pub id: AccountId,
+        pub puntaje: u8,
+        pub id_orden: u32,
+    }
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct Producto {
+        pub id: u32,
+        pub nombre: String,
+        pub descripcion: String,
+        pub precio: u32,
+        pub stock: u32,
+        pub categoria: Categoria,
+    }
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct Publicacion {
+        pub id_publicacion: u32,
+        pub id_vendedor: AccountId,
+        pub producto: Producto,
+        pub estado: EstadoPublicacion,
+        pub fecha_publicacion: u64,
+    }
+    #[derive(
+        Debug,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct Orden {
+        pub id: u32,
+        pub comprador: AccountId,
+        pub vendedor: AccountId,
+        pub productos: Vec<(u32, Producto)>,
+        pub estado: Estado,
+        pub total: u32,
+        pub pendiente_cancelacion: bool,
+    }
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
@@ -14,108 +193,6 @@
         contador_ordenes: u32,
         contador_productos: u32,
         //aca iria lo de reputacion, creo
-    }
-
-    pub struct Usuario {
-        username: String,
-        rol: Rol,
-        id: AccountId,
-        calificaciones: Vec<Calificacion>,
-        verificacion: bool,
-    }
-
-
-    pub struct Calificacion {
-        id: AccountId, //o usuario para verificar que solo califico una vez y no mas
-        puntaje: u8,
-        id_orden: u32,
-    }
-
-    pub struct Producto {
-        id: u32, //id del producto
-        nombre: String,
-        descripcion: String,
-        precio: u32,
-        stock: u32,
-        categoria: Categoria,
-    }
-
-
-    pub struct Publicacion {
-        id_publicacion: u32,       // ID de la publicación
-        id_vendedor: AccountId,    // ID del vendedor
-        producto: Producto,        //lo podriamos poner asi, directamente
-        estado: EstadoPublicacion, // Estado de la publicación
-        fecha_publicacion: u64,    // Fecha de publicación (timestamp, as UNIX timestamp)
-    }
-
-    pub struct Orden {
-        id: u32,                           //id de la orden
-         id_publicacion: u32,       // ID de la publicación
-         id_vendedor: AccountId,    // ID del vendedor
-         producto: Producto, //lo podriamos poner asi, directamente
-         estado: EstadoPublicacion, // Estado de la publicación
-         fecha_publicacion: u64,    // Fecha de publicación (timestamp, as UNIX timestamp)
-    }
-
-    pub enum Rol {
-        Comprador,
-        Vendedor,
-        Ambos,
-    }
-
-    pub enum Categoria {
-        Tecnologia,
-        Indumentaria,
-        Hogar,
-        Alimentos,
-        Otros,
-    }
-
-    pub enum Estado {
-        Pendiente,
-        Enviado,
-        Recibido,
-        Cancelada,
-    }
-
-    pub enum EstadoPublicacion {
-        Activa,
-        Pausada,
-        Eliminada,
-        Agotada,
-    }
-    impl Usuario {
-        pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
-            Self {
-                username,
-                rol,
-                id,
-                calificaciones: Vec::new(),
-                verificacion: true,
-            }
-        }
-    }
-
-    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub enum ErrorOrden {
-        NoEsVendedor,
-        NoEsComprador,
-        EstadoInvalido,
-        CancelacionNoSolicitada,
-        CancelacionYaPendiente,
-        OrdenCancelada,
-        NoAutorizado,
-    }
-    pub struct Orden {
-        id: u32,
-        comprador: AccountId,
-        vendedor: AccountId,
-        productos: Mapping<u32, Producto>, //lo dejamos asi??
-        estado: Estado,
-        total: u32,
-        pendiente_cancelacion: bool,
     }
     impl Orden {
         pub fn marcar_enviada(&mut self, vendedor: AccountId) -> Result<(), ErrorOrden> {
@@ -187,21 +264,21 @@
             self.pendiente_cancelacion = false;
             Ok(())
         }
-}
+    }
     impl MarketPlace {
         /// Crea una nueva instancia del contrato MarketPlace.
         /// # Retorna
         /// Un contrato con mapas vacíos y contadores en cero.
         #[ink(constructor)]
         pub fn new() -> Self {
-         Self {
-                 usuarios: Mapping::default(),
-                 productos: Mapping::default(),
-                 ordenes: Mapping::default(),
-                 productos_por_usuario: Mapping::default(),
-                 contador_ordenes: 0,
-                 contador_productos: 0,            
-             }
+            Self {
+                usuarios: Mapping::default(),
+                productos: Mapping::default(),
+                ordenes: Mapping::default(),
+                productos_por_usuario: Mapping::default(),
+                contador_ordenes: 0,
+                contador_productos: 0,
+            }
         }
         /// Registra un nuevo usuario en el sistema con su rol.
         /// # Parámetros
@@ -238,7 +315,7 @@
             self.usuarios.insert(caller, &nuevo);
             Ok(())
         }
-        
+
         //
 
         //Helper verificar usuario exista
