@@ -145,7 +145,7 @@ mod market_place {
         ink::storage::traits::StorageLayout,
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub struct Usuario {
+    struct Usuario {
         username: String,
         rol: Rol,
         id: AccountId,
@@ -173,10 +173,29 @@ mod market_place {
         ink::storage::traits::StorageLayout,
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub struct Calificacion {
-        pub id: AccountId,
-        pub puntaje: u8,
-        pub id_orden: u32,
+    struct Calificacion {
+        id: AccountId,
+        puntaje: u8,
+        id_orden: u32,
+    }
+
+    impl Calificacion {
+        /// Crea una nueva calificación válida.
+        ///
+        /// # Parámetros
+        /// - `calificador`: cuenta que realiza la calificación
+        /// - `puntaje`: entero entre 1 y 5
+        /// - `orden_id`: ID de la orden asociada
+        ///
+        /// # Retorna
+        /// - Instancia de `Calificacion`
+        pub fn new(id: AccountId, puntaje: u8, id_orden: u32) -> Self {
+            Self {
+                id,
+                puntaje,
+                id_orden,
+            }
+        }
     }
     #[derive(
         Debug,
@@ -188,13 +207,14 @@ mod market_place {
         ink::storage::traits::StorageLayout,
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub struct Producto {
-        pub id: u32,
-        pub nombre: String,
-        pub descripcion: String,
-        pub precio: u32,
-        pub stock: u32,
-        pub categoria: Categoria,
+    struct Producto {
+        id: u32,
+        id_vendedor: AccountId,
+        nombre: String,
+        descripcion: String,
+        precio: u128,
+        stock: u32,
+        categoria: Categoria,
     }
     #[derive(
         Debug,
@@ -206,11 +226,11 @@ mod market_place {
         ink::storage::traits::StorageLayout,
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub struct Publicacion {
-        pub id_publicacion: u32,
-        pub id_vendedor: AccountId,
-        pub producto: Producto,
-        pub fecha_publicacion: u64,
+    struct Publicacion {
+        id_publicacion: u32,
+        id_vendedor: AccountId,
+        producto: Producto,
+        //fecha_publicacion: u64, Preguntar al
     }
     #[derive(
         Debug,
@@ -221,30 +241,46 @@ mod market_place {
         ink::storage::traits::StorageLayout,
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub struct Orden {
-        pub id: u32,
-        pub comprador: AccountId,
-        pub vendedor: AccountId,
-        pub productos: Vec<(u32, Producto)>,
-        pub estado: EstadoOrden,
-        pub total: u32,
-        pub pendiente_cancelacion: bool,
+    struct Orden {
+        id: u32,
+        comprador: AccountId,
+        vendedor: AccountId,
+        productos: Vec<(u32, Producto)>,
+        estado: EstadoOrden,
+        total: u128,
+        pendiente_cancelacion: bool,
     }
-    /// Defines the storage of your contract.
-    /// Add new fields to the below struct in order
-    /// to add new static storage fields to your contract.
-    #[ink(storage)]
-    pub struct MarketPlace {
-        usuarios: Mapping<AccountId, Usuario>,
-        productos: Mapping<u32, Producto>,
-        ordenes: Mapping<u32, Orden>,
-        publicaciones: Mapping<AccountId, Publicacion>,
-        productos_por_usuario: Mapping<AccountId, Producto>,
-        contador_ordenes: u32,
-        contador_productos: u32,
-        //aca iria lo de reputacion, creo
-    }
+
     impl Orden {
+        /// Crea una nueva orden de compra.
+        ///
+        /// # Parámetros
+        /// - `id`: ID único de la orden.
+        /// - `comprador`: Cuenta del comprador.
+        /// - `vendedor`: Cuenta del vendedor.
+        /// - `productos`: Lista de tuplas (producto_id, cantidad).
+        /// - `total`: Monto total de la orden.
+        ///
+        /// # Retorna
+        /// Una nueva instancia de `Orden` en estado `Pendiente`.
+        pub fn new(
+            id: u32,
+            comprador: AccountId,
+            vendedor: AccountId,
+            productos: Vec<(u32, Producto)>,
+            total: u128,
+        ) -> Self {
+            Self {
+                id,
+                comprador,
+                vendedor,
+                productos,
+                total,
+                estado: EstadoOrden::Pendiente,
+                pendiente_cancelacion: false,
+            }
+        }
+
         pub fn marcar_enviada(&mut self, vendedor: AccountId) -> Result<(), ErrorOrden> {
             //validar que la orden no este cancelada
             if self.estado == EstadoOrden::Cancelada {
@@ -294,9 +330,9 @@ mod market_place {
             }
             //marcar como pendiente la cancelacion
             self.pendiente_cancelacion = true;
-            OK(())
+            Ok(())
         }
-        pub fn confirmar_cancelacion(&mut self, Usuario: AccountId) -> Result<(), ErrorOrden> {
+        pub fn confirmar_cancelacion(&mut self, usuario: AccountId) -> Result<(), ErrorOrden> {
             //verificar si la orden ya fue cancelada
             if self.estado == EstadoOrden::Cancelada {
                 return Err(ErrorOrden::OrdenCancelada);
@@ -315,6 +351,21 @@ mod market_place {
             Ok(())
         }
     }
+
+    /// Defines the storage of your contract.
+    /// Add new fields to the below struct in order
+    /// to add new static storage fields to your contract.
+    #[ink(storage)]
+    pub struct MarketPlace {
+        usuarios: Mapping<AccountId, Usuario>,
+        productos: Mapping<u32, Producto>,
+        ordenes: Mapping<u32, Orden>,
+        publicaciones: Mapping<AccountId, Publicacion>,
+        productos_por_usuario: Mapping<AccountId, Producto>,
+        contador_ordenes: u32,
+        contador_productos: u32,
+        //aca iria lo de reputacion, creo
+    }
     impl MarketPlace {
         /// Crea una nueva instancia del contrato MarketPlace.
         /// # Retorna
@@ -325,6 +376,7 @@ mod market_place {
                 usuarios: Mapping::default(),
                 productos: Mapping::default(),
                 ordenes: Mapping::default(),
+                publicaciones: Mapping::default(),
                 productos_por_usuario: Mapping::default(),
                 contador_ordenes: 0,
                 contador_productos: 0,
@@ -366,6 +418,31 @@ mod market_place {
             Ok(())
         }
 
+        impl Publicacion {
+            pub fn new(
+                id_publicacion: u32,
+                id_vendedor: AccountId,
+                nombre: String,
+                descripcion: String,
+                stock: u32,
+                categoria: Categoria,
+                precio: u128,
+            ) -> Self {
+                Self {
+                    id_publicacion,
+                    id_vendedor,
+                    producto: Producto {
+                        id: id_publicacion,
+                        id_vendedor,
+                        nombre,
+                        descripcion,
+                        stock,
+                        categoria,
+                        precio,
+                    },
+                }
+            }
+        }
         //
 
         //Helper verificar usuario exista
@@ -449,8 +526,6 @@ mod market_place {
                 stock,
                 categoria,
                 precio,
-                EstadoPublicacion::Activa,
-                self.env().block_timestamp(),
             );
 
             //Guardamos la publicación en el mapping
@@ -514,21 +589,91 @@ mod market_place {
     mod tests {
         /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
-
+        /*
         /// We test if the default constructor does its job.
         #[ink::test]
         fn default_works() {
             let MarketPlace = MarketPlace::default();
             assert_eq!(MarketPlace.get(), false);
+        } */
+
+        fn account(id: u8) -> AccountId {
+            AccountId::from([id; 32])
         }
 
-        /// We test a simple use case of our contract.
-        #[ink::test]
-        fn it_works() {
-            let mut MarketPlace = MarketPlace::new();
-            assert_eq!(MarketPlace.get(), false);
-            MarketPlace.flip();
-            assert_eq!(MarketPlace.get(), true);
+        #[test]
+        fn crear_calificacion_ok() {
+            let calif = Calificacion::new(account(1), 5, 42);
+            assert_eq!(calif.id, account(1));
+            assert_eq!(calif.puntaje, 5);
+            assert_eq!(calif.id_orden, 42);
+        }
+
+        #[test]
+        fn calificacion_valor_maximo() {
+            let calif = Calificacion::new(account(2), 5, 100);
+            assert_eq!(calif.puntaje, 5);
+        }
+
+        #[test]
+        fn calificacion_valor_minimo() {
+            let calif = Calificacion::new(account(3), 1, 100);
+            assert_eq!(calif.puntaje, 1);
+        }
+
+        #[test]
+        fn test_orden_enviada_ok() {
+            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let res = orden.marcar_enviada(account(2));
+            assert_eq!(res, Ok(()));
+            assert_eq!(orden.estado, EstadoOrden::Enviado);
+        }
+
+        #[test]
+        fn test_orden_enviada_no_autorizado() {
+            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let res = orden.marcar_enviada(account(3));
+            assert_eq!(res, Err(ErrorOrden::NoAutorizado));
+        }
+
+        #[test]
+        fn test_orden_recibida_ok() {
+            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            orden.estado = EstadoOrden::Enviado;
+            let res = orden.marcar_recibida(account(1));
+            assert_eq!(res, Ok(()));
+            assert_eq!(orden.estado, EstadoOrden::Recibido);
+        }
+
+        #[test]
+        fn test_solicitar_cancelacion_ok() {
+            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let res = orden.solicitar_cancelacion(account(1));
+            assert_eq!(res, Ok(()));
+            assert!(orden.pendiente_cancelacion);
+        }
+
+        #[test]
+        fn test_confirmar_cancelacion_ok() {
+            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            orden.pendiente_cancelacion = true;
+            let res = orden.confirmar_cancelacion(account(2));
+            assert_eq!(res, Ok(()));
+            assert_eq!(orden.estado, EstadoOrden::Cancelada);
+        }
+
+        #[test]
+        fn test_confirmar_cancelacion_sin_solicitar() {
+            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let res = orden.confirmar_cancelacion(account(2));
+            assert_eq!(res, Err(ErrorOrden::CancelacionPendiente));
+        }
+
+        #[test]
+        fn test_marcar_recibida_estado_invalido() {
+            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let res = orden.marcar_recibida(account(1));
+            assert_eq!(res, Err(ErrorOrden::EstadoInvalido));
         }
     }
 

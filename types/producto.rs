@@ -1,13 +1,12 @@
-use crate::types::enums::Categoria;
+/* use crate::types::enums::Categoria;
 use ink::prelude::string::String;
 use ink::primitives::AccountId;
 use ink::scale::{Decode, Encode};
-use ink::storage::traits::StorageLayout;
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, StorageLayout)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 #[cfg_attr(feature = "std", derive(ink::scale_info::TypeInfo))]
 pub struct Producto {
-    pub id: u64,
+    pub id: u32,
     pub propietario: AccountId,
     pub nombre: String,
     pub descripcion: String,
@@ -15,3 +14,4 @@ pub struct Producto {
     pub stock: u32,
     pub categoria: Categoria,
 }
+ */

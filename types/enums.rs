@@ -1,7 +1,7 @@
-use ink::{
+/* use ink::{
     scale::{Decode, Encode},
     storage::traits::StorageLayout,
-};
+}; */
 
 /* #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, StorageLayout)]
 #[cfg_attr(feature = "std", derive(ink::scale_info::TypeInfo))]
