@@ -6,7 +6,7 @@ mod market_place {
     use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
 
-    // Enums
+    /// Enums
     #[derive(
         Debug,
         Clone,
@@ -49,7 +49,7 @@ mod market_place {
         ink::storage::traits::StorageLayout,
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub enum Estado {
+    pub enum EstadoOrden {
         Pendiente,
         Enviado,
         Recibido,
@@ -65,14 +65,6 @@ mod market_place {
         ink::storage::traits::StorageLayout,
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub enum EstadoPublicacion {
-        Activa,
-        Pausada,
-        Eliminada,
-        Agotada,
-    }
-    #[derive(Debug, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum ErrorOrden {
         NoEsVendedor,
         NoEsComprador,
@@ -81,8 +73,67 @@ mod market_place {
         CancelacionYaPendiente,
         OrdenCancelada,
         NoAutorizado,
+        UsuarioYaRegistrado,
+        UsuarioNoExiste,
+        RolInvalido,
+        ProductoNoExiste,
+        StockInsuficiente,
+        OrdenNoExiste,
+        YaCalificado,
+        PuntajeInvalido,
+        CancelacionPendiente,
+        CalificacionDuplicada,
     }
 
+    //Enum Errores
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+    #[derive(Debug, PartialEq)]
+
+    pub enum ErrorMarketplace {
+        UsuarioYaRegistrado,
+        UsuarioNoExiste,
+        RolInvalido,
+        ProductoNoExiste,
+        StockInsuficiente,
+        OrdenNoExiste,
+        NoEsComprador,
+        NoEsVendedor,
+        EstadoInvalido,
+        YaCalificado,
+        PuntajeInvalido,
+        NoAutorizado,
+        CancelacionPendiente,
+        CalificacionDuplicada,
+    }
+    #[cfg(feature = "std")]
+    impl core::fmt::Display for ErrorMarketplace {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            let mensaje = match self {
+                ErrorMarketplace::UsuarioYaRegistrado => "El usuario ya está registrado",
+                ErrorMarketplace::UsuarioNoExiste => "El usuario no fue encontrado",
+                ErrorMarketplace::RolInvalido => "Rol inválido",
+                ErrorMarketplace::ProductoNoExiste => "Producto no encontrado",
+                ErrorMarketplace::StockInsuficiente => "No hay stock suficiente",
+                ErrorMarketplace::OrdenNoExiste => "La orden no existe",
+                ErrorMarketplace::NoEsComprador => {
+                    "Solo los compradores pueden realizar esta acción"
+                }
+                ErrorMarketplace::NoEsVendedor => "Solo los vendedores pueden realizar esta acción",
+                ErrorMarketplace::EstadoInvalido => "El estado no es válido para esta acción",
+                ErrorMarketplace::YaCalificado => "El usuario ya fue calificado para esta orden",
+                ErrorMarketplace::PuntajeInvalido => "Puntaje inválido. Debe estar entre 1 y 5",
+                ErrorMarketplace::NoAutorizado => "No tiene autorización para realizar esta acción",
+                ErrorMarketplace::CancelacionPendiente => {
+                    "La orden ya tiene una solicitud de cancelación pendiente"
+                }
+                ErrorMarketplace::CalificacionDuplicada => {
+                    "La calificación ya fue registrada para esta orden"
+                }
+            };
+            write!(f, "{mensaje}")
+        }
+    }
     // Structs
     #[derive(
         Debug,
@@ -95,11 +146,11 @@ mod market_place {
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Usuario {
-        pub username: String,
-        pub rol: Rol,
-        pub id: AccountId,
-        pub calificaciones: Vec<Calificacion>,
-        pub verificacion: bool,
+        username: String,
+        rol: Rol,
+        id: AccountId,
+        calificaciones: Vec<Calificacion>,
+        verificacion: bool,
     }
     impl Usuario {
         pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
@@ -159,7 +210,6 @@ mod market_place {
         pub id_publicacion: u32,
         pub id_vendedor: AccountId,
         pub producto: Producto,
-        pub estado: EstadoPublicacion,
         pub fecha_publicacion: u64,
     }
     #[derive(
@@ -176,7 +226,7 @@ mod market_place {
         pub comprador: AccountId,
         pub vendedor: AccountId,
         pub productos: Vec<(u32, Producto)>,
-        pub estado: Estado,
+        pub estado: EstadoOrden,
         pub total: u32,
         pub pendiente_cancelacion: bool,
     }
@@ -197,7 +247,7 @@ mod market_place {
     impl Orden {
         pub fn marcar_enviada(&mut self, vendedor: AccountId) -> Result<(), ErrorOrden> {
             //validar que la orden no este cancelada
-            if self.estado == Estado::Cancelada {
+            if self.estado == EstadoOrden::Cancelada {
                 return Err(ErrorOrden::OrdenCancelada);
             }
             //validar que quien llame sea vendedor
@@ -205,16 +255,16 @@ mod market_place {
                 return Err(ErrorOrden::NoEsVendedor);
             }
             //validar que la orden este en estado "Pendiente" para poder marcarla como enviada
-            if self.estado != Estado::Pendiente {
+            if self.estado != EstadoOrden::Pendiente {
                 return Err(ErrorOrden::EstadoInvalido);
             }
             //cambiar el estado a "Enviado"
-            self.estado = Estado::Enviado;
+            self.estado = EstadoOrden::Enviado;
             Ok(())
         }
         pub fn marcar_recibida(&mut self, comprador: AccountId) -> Result<(), ErrorOrden> {
             //validar que la orden no este cancelada
-            if self.estado == Estado::Cancelada {
+            if self.estado == EstadoOrden::Cancelada {
                 return Err(ErrorOrden::OrdenCancelada);
             }
             //validar que quien llama sea el comprador
@@ -222,16 +272,16 @@ mod market_place {
                 return Err(ErrorOrden::NoEsComprador);
             }
             //solo se marca como recibida si ya fue enviada
-            if self.estado != Estado::Enviado {
+            if self.estado != EstadoOrden::Enviado {
                 return Err(ErrorOrden::EstadoInvalido);
             }
             //cambiar el estado a "Recibido"
-            self.estado = Estado::Recibido;
+            self.estado = EstadoOrden::Recibido;
             Ok(())
         }
         pub fn solicitar_cancelacion(&mut self, usuario: AccountId) -> Result<(), ErrorOrden> {
             //validar que la orden no este ya cancelada
-            if self.estado == Estado::Cancelada {
+            if self.estado == EstadoOrden::Cancelada {
                 return Err(ErrorOrden::OrdenCancelada);
             }
             //validar que quien solicita sea comprador o vendedor
@@ -248,7 +298,7 @@ mod market_place {
         }
         pub fn confirmar_cancelacion(&mut self, Usuario: AccountId) -> Result<(), ErrorOrden> {
             //verificar si la orden ya fue cancelada
-            if self.estado == Estado::Cancelada {
+            if self.estado == EstadoOrden::Cancelada {
                 return Err(ErrorOrden::OrdenCancelada);
             }
             //solo un comprador o vendedor puede confirmar la cancelacion
@@ -260,7 +310,7 @@ mod market_place {
                 return Err(ErrorOrden::CancelacionNoSolicitada);
             }
             //cambiar el estado a "Cancelada" y limpiar el flag
-            self.estado = Estado::Cancelada;
+            self.estado = EstadoOrden::Cancelada;
             self.pendiente_cancelacion = false;
             Ok(())
         }
