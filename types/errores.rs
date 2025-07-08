@@ -1,6 +1,6 @@
 /// Representa un error al llamar a un metodo del sistema.
-#[ink::scale_derive(Encode, Decode, TypeInfo)]
-#[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+//#[ink::scale_derive(Encode, Decode, TypeInfo)]
+/* #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
 #[derive(Debug,PartialEq)]
 
 pub enum ErrorMarketplace {
@@ -18,9 +18,11 @@ pub enum ErrorMarketplace {
     NoAutorizado,
     CancelacionPendiente,
     CalificacionDuplicada,
-}
+} */
 
 /// implemntacion de Display para ErrorMarketplace
+/// 
+/* 
 #[cfg(feature = "std")]
 impl core::fmt::Display for ErrorMarketplace {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -37,9 +39,14 @@ impl core::fmt::Display for ErrorMarketplace {
             ErrorMarketplace::YaCalificado => "El usuario ya fue calificado para esta orden",
             ErrorMarketplace::PuntajeInvalido => "Puntaje inválido. Debe estar entre 1 y 5",
             ErrorMarketplace::NoAutorizado => "No tiene autorización para realizar esta acción",
-            ErrorMarketplace::CancelacionPendiente => "La orden ya tiene una solicitud de cancelación pendiente",
-            ErrorMarketplace::CalificacionDuplicada => "La calificación ya fue registrada para esta orden",
+            ErrorMarketplace::CancelacionPendiente => {
+                "La orden ya tiene una solicitud de cancelación pendiente"
+            }
+            ErrorMarketplace::CalificacionDuplicada => {
+                "La calificación ya fue registrada para esta orden"
+            }
         };
         write!(f, "{mensaje}")
     }
 }
+ */
