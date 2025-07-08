@@ -1,6 +1,6 @@
-use ink::scale::{Decode, Encode};
+use ink::{scale::{Decode, Encode}, storage::traits::StorageLayout};
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, StorageLayout)]
 #[cfg_attr(feature = "std", derive(ink::scale_info::TypeInfo))]
 pub enum Rol {
     Comprador,
@@ -8,7 +8,7 @@ pub enum Rol {
     Ambos,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, StorageLayout)]
 #[cfg_attr(feature = "std", derive(ink::scale_info::TypeInfo))]
 pub enum Categoria {
     Tecnologia,
@@ -18,9 +18,9 @@ pub enum Categoria {
     Otros,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode, StorageLayout)]
 #[cfg_attr(feature = "std", derive(ink::scale_info::TypeInfo))]
-pub enum Estado {
+pub enum EstadoOrden {
     Pendiente,
     Enviado,
     Recibido,
