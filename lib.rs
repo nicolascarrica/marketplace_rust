@@ -1,23 +1,28 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 mod types;
+use crate::types::enums::EstadoPublicacion;
+use crate::types::enums::{Categoria, Rol};
 #[ink::contract]
+
 mod market_place {
     use ink::{
         storage::Mapping,
         xcm::{v2::Junction::AccountId32, v3::Junction::AccountId32, v4::Junction::AccountKey20},
     };
+
+    use crate::types::{usuario::Usuario, Categoria, EstadoPublicacion, Publicacion, Rol};
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct MarketPlace {
-        usuarios: Mapping<AccountId, Usuario>,  //aca seria id?
-        productos: Mapping<AccountId, Balance>, //no deberia ser un vec donde solo guarde los productos, porque el producto ya tiene su stock
-        ordenes: Mapping<AccountId, Balance>,   //lo mismo
+        usuarios: Mapping<AccountId, Usuario>,
+        productos: Mapping<u32, Producto>,
+        ordenes: Mapping<u32, Orden>,
         publicaciones: Mapping<AccountId, Publicacion>,
         productos_por_usuario: Mapping<AccountId, Producto>,
-        contador_ordenes: u64,
-        contador_productos: u64,
+        contador_ordenes: u32,
+        contador_productos: u32,
         //aca iria lo de reputacion, creo
     }
 
@@ -25,18 +30,18 @@ mod market_place {
         username: String,
         rol: Rol,
         id: AccountId,
-        calificaciones: Vec<Calificacion>, //creo que seria solo uno, porque ya el usuario sabe quien es, por ende no tiene sentido tener 2 vec o no??
+        calificaciones: Vec<Calificacion>,
         verificacion: bool,
     }
 
     pub struct Calificacion {
         id: AccountId, //o usuario para verificar que solo califico una vez y no mas
         puntaje: u8,
-        id_orden: u64,
+        id_orden: u32,
     }
 
     pub struct Producto {
-        id: AccountId,
+        id: u32, //id del producto
         nombre: String,
         descripcion: String,
         precio: u32,
@@ -45,13 +50,16 @@ mod market_place {
     }
 
     pub struct Publicacion {
-        id: AccountId,                     //quien lo publica
-        productos: Mapping<u32, Producto>, //la cantidad de productos y el producto, tenia algo mas??
+        id_publicacion: u32,       // ID de la publicación
+        id_vendedor: AccountId,    // ID del vendedor
+        producto: Producto,        //lo podriamos poner asi, directamente
+        estado: EstadoPublicacion, // Estado de la publicación
+        fecha_publicacion: u64,    // Fecha de publicación (timestamp, as UNIX timestamp)
     }
 
     pub struct Orden {
-        id: u64,
-        productos: Mapping<u32, Producto>, //lo dejamos asi??
+        id: u32,                           //id de la orden
+        productos: Mapping<u32, Producto>, //(cantidad, producto)
         estado: Estado,
     }
 
@@ -76,6 +84,12 @@ mod market_place {
         Cancelada,
     }
 
+    pub enum EstadoPublicacion {
+        Activa,
+        Pausada,
+        Eliminada,
+        Agotada,
+    }
     impl Usuario {
         pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
             Self {
@@ -85,6 +99,98 @@ mod market_place {
                 calificaciones: Vec::new(),
                 verificacion: true,
             }
+        }
+    }
+
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum ErrorOrden {
+        NoEsVendedor,
+        NoEsComprador,
+        EstadoInvalido,
+        CancelacionNoSolicitada,
+        CancelacionYaPendiente,
+        OrdenCancelada,
+        NoAutorizado,
+    }
+    pub struct Orden {
+        id: u32,
+        comprador: AccountId,
+        vendedor: AccountId,
+        productos: Mapping<u32, Producto>, //lo dejamos asi??
+        estado: Estado,
+        total: u32,
+        pendiente_cancelacion: bool,
+    }
+    impl Orden {
+        pub fn marcar_enviada(&mut self, vendedor: AccountId) -> Result<(), ErrorOrden> {
+            //validar que la orden no este cancelada
+            if self.estado == Estado::Cancelada {
+                return Err(ErrorOrden::OrdenCancelada);
+            }
+            //validar que quien llame sea vendedor
+            if vendedor != self.vendedor {
+                return Err(ErrorOrden::NoEsVendedor);
+            }
+            //validar que la orden este en estado "Pendiente" para poder marcarla como enviada
+            if self.estado != Estado::Pendiente {
+                return Err(ErrorOrden::EstadoInvalido);
+            }
+            //cambiar el estado a "Enviado"
+            self.estado = Estado::Enviado;
+            Ok(())
+        }
+        pub fn marcar_recibida(&mut self, comprador: AccountId) -> Result<(), ErrorOrden> {
+            //validar que la orden no este cancelada
+            if self.estado == Estado::Cancelada {
+                return Err(ErrorOrden::OrdenCancelada);
+            }
+            //validar que quien llama sea el comprador
+            if comprador != self.comprador {
+                return Err(ErrorOrden::NoEsComprador);
+            }
+            //solo se marca como recibida si ya fue enviada
+            if self.estado != Estado::Enviado {
+                return Err(ErrorOrden::EstadoInvalido);
+            }
+            //cambiar el estado a "Recibido"
+            self.estado = Estado::Recibido;
+            Ok(())
+        }
+        pub fn solicitar_cancelacion(&mut self, usuario: AccountId) -> Result<(), ErrorOrden> {
+            //validar que la orden no este ya cancelada
+            if self.estado == Estado::Cancelada {
+                return Err(ErrorOrden::OrdenCancelada);
+            }
+            //validar que quien solicita sea comprador o vendedor
+            if usuario != self.comprador && usuario != self.vendedor {
+                return Err(ErrorOrden::NoAutorizado);
+            }
+            //verificar si antes ya se pidio cancelar
+            if self.pendiente_cancelacion {
+                return Err(ErrorOrden::CancelacionYaPendiente);
+            }
+            //marcar como pendiente la cancelacion
+            self.pendiente_cancelacion = true;
+            OK(())
+        }
+        pub fn confirmar_cancelacion(&mut self, Usuario: AccountId) -> Result<(), ErrorOrden> {
+            //verificar si la orden ya fue cancelada
+            if self.estado == Estado::Cancelada {
+                return Err(ErrorOrden::OrdenCancelada);
+            }
+            //solo un comprador o vendedor puede confirmar la cancelacion
+            if usuario != self.comprador && usuario != self.vendedor {
+                return Err(ErrorOrden::NoAutorizado);
+            }
+            //no se puede confirmar la cancelacion si no hay una cancelacion pendiente
+            if !self.pendiente_cancelacion {
+                return Err(ErrorOrden::CancelacionNoSolicitada);
+            }
+            //cambiar el estado a "Cancelada" y limpiar el flag
+            self.estado = Estado::Cancelada;
+            self.pendiente_cancelacion = false;
+            Ok(())
         }
     }
 
@@ -119,7 +225,8 @@ mod market_place {
         }
 
         #[ink(message)]
-        pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> bool { //o que no devuelva nada, todavia no se
+        pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> bool {
+            //o que no devuelva nada, todavia no se
             let caller = self.env().caller();
             let mut usuario = match self.usuarios.get(caller) {
                 Some(u) => u,
@@ -131,6 +238,144 @@ mod market_place {
             true
         }
         //
+
+        //Helper verificar usuario exista
+        fn verificar_usuario(&self, id: AccountId) -> Result<Usuario, String> {
+            self.usuarios
+                .get(&id)
+                .ok_or_else(|| "Usuario no encontrado".to_string())
+        }
+        //Helper verificar que el usuario tenga el rol correcto
+        fn verificar_rol(&self, id: AccountId) -> Result<(), String> {
+            let usuario = self.verificar_usuario(id)?;
+            if usuario.rol == Rol::Ambos || usuario.rol == Rol::Vendedor {
+                Ok(())
+            } else {
+                Err(format!(
+                    "El usuario no tiene el rol requerido: {:?}",
+                    usuario.rol
+                ))
+            }
+        }
+
+        //Helper para validar que el producto tenga un nombre, precio y stock
+        fn validacion_producto(
+            &self,
+            nombre: &String,
+            precio: &u128,
+            stock: &u32,
+        ) -> Result<(), String> {
+            if *stock <= 0 {
+                return Err("El producto no tiene stock".to_string());
+            }
+            if *precio <= 0 {
+                return Err("El precio del producto debe ser mayor a 0".to_string());
+            }
+            if nombre.is_empty() || nombre.trim().is_empty() {
+                return Err("El nombre del producto no puede estar vacío".to_string());
+            }
+            Ok(())
+        }
+        //Helper para obtener una publicacion por id
+        fn obtener_publicacion(&self, id_publicacion: u32) -> Result<Publicacion, String> {
+            self.publicaciones
+                .get(&id_publicacion)
+                .ok_or_else(|| "Publicación no encontrada".to_string())
+        }
+        //Helper para verificar que el usuario es el owner de la publicacion
+        fn verificar_owner_publicacion(
+            &self,
+            id_publicacion: u32,
+            id_vendedor: AccountId,
+        ) -> Result<(), String> {
+            let publicacion = self.obtener_publicacion(id_publicacion)?;
+            if publicacion.id_vendedor != id_vendedor {
+                return Err("No tienes permisos para modificar esta publicación".to_string());
+            }
+            Ok(())
+        }
+
+        //Publicar producto
+        #[ink(message)]
+        pub fn publicar_producto(
+            &mut self,
+            nombre: String,
+            descripcion: String,
+            precio: u128,
+            stock: u32,
+            categoria: Categoria,
+        ) -> Result<(), String> {
+            let id_vendedor = self.env().caller();
+            self.verificar_usuario(id_vendedor)?;
+            self.verificar_rol(id_vendedor)?;
+            self.validacion_producto(&nombre, &precio, &stock)?;
+
+            self.contador_productos += 1;
+            let id_publicacion = self.contador_productos;
+            let nueva_publicacion = Publicacion::new(
+                id_publicacion,
+                id_vendedor,
+                nombre,
+                descripcion,
+                stock,
+                categoria,
+                precio,
+                EstadoPublicacion::Activa,
+                self.env().block_timestamp(),
+            );
+
+            //Guardamos la publicación en el mapping
+            self.publicaciones
+                .insert(id_publicacion, &nueva_publicacion);
+            Ok(())
+        }
+
+        /// Actualizar stock de una publicación
+        #[ink(message)]
+        pub fn actualizar_stock(
+            &mut self,
+            id_publicacion: u32,
+            nuevo_stock: u32,
+        ) -> Result<(), String> {
+            let caller = self.env().caller();
+
+            //Verificamos que la publicación exista
+            let mut publicacion = self.obtener_publicacion(id_publicacion)?;
+            //Verificamos que el caller es el dueño de la publicación
+            self.verificar_owner_publicacion(id_publicacion, caller)?;
+            //Validamos el nuevo stock
+            publicacion.stock = nuevo_stock;
+            self.publicaciones.insert(id_publicacion, &publicacion);
+
+            Ok(())
+        }
+        /// Pausar/Activar una publicación
+        #[ink(message)]
+        pub fn cambiar_estado_publicacion(
+            &mut self,
+            id_publicacion: u32,
+            nuevo_estado: EstadoPublicacion,
+        ) -> Result<(), String> {
+            let caller = self.env().caller();
+
+            //Verificamos que la publicación exista
+            let mut publicacion = self.obtener_publicacion(id_publicacion)?;
+            //Verificamos que el caller es el dueño de la publicación
+            self.verificar_owner_publicacion(id_publicacion, caller)?;
+            //Actualizamos el estado de la publicación
+            publicacion.estado = nuevo_estado;
+            self.publicaciones.insert(id_publicacion, &publicacion);
+
+            Ok(())
+        }
+        /// Obtener lista de publicaciones de un vendedor por su ID
+        #[ink(message)]
+        pub fn obtener_publicaciones_por_vendedor(&self, vendedor: AccountId) -> Vec<Publicacion> {
+            (1..=self.contador_productos)
+                .filter_map(|i| self.publicaciones.get(&i))
+                .filter(|publicacion| publicacion.id_vendedor == vendedor)
+                .collect()
+        }
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
