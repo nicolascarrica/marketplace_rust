@@ -1,26 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-mod types;
 #[ink::contract]
-
-mod market_place {
-    use crate::types::orden::Orden;
-    use crate::types::producto::Producto;
-    use crate::types::usuario::Usuario;
-    use crate::types::errores::ErrorMarketplace;
-    use crate::types::enums::Rol;
-   use ink::{
-        storage::Mapping,
-        xcm::{v2::Junction::AccountId32, v3::Junction::AccountId32, v4::Junction::AccountKey20},
-    };
 
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct MarketPlace {
-        usuarios: Mapping<AccountId, Usuario>,  
-        productos: Mapping<u32, Producto>, 
-        ordenes: Mapping<u32, Orden>,  
+        usuarios: Mapping<AccountId, Usuario>,
+        productos: Mapping<u32, Producto>,
+        ordenes: Mapping<u32, Orden>,
         publicaciones: Mapping<AccountId, Publicacion>,
         productos_por_usuario: Mapping<AccountId, Producto>,
         contador_ordenes: u32,
@@ -32,7 +20,7 @@ mod market_place {
         username: String,
         rol: Rol,
         id: AccountId,
-        calificaciones: Vec<Calificacion>, 
+        calificaciones: Vec<Calificacion>,
         verificacion: bool,
     }
 
@@ -54,17 +42,20 @@ mod market_place {
 
 
     pub struct Publicacion {
+        id_publicacion: u32,       // ID de la publicación
+        id_vendedor: AccountId,    // ID del vendedor
+        producto: Producto,        //lo podriamos poner asi, directamente
+        estado: EstadoPublicacion, // Estado de la publicación
+        fecha_publicacion: u64,    // Fecha de publicación (timestamp, as UNIX timestamp)
+    }
+
+    pub struct Orden {
+        id: u32,                           //id de la orden
          id_publicacion: u32,       // ID de la publicación
          id_vendedor: AccountId,    // ID del vendedor
          producto: Producto, //lo podriamos poner asi, directamente
          estado: EstadoPublicacion, // Estado de la publicación
          fecha_publicacion: u64,    // Fecha de publicación (timestamp, as UNIX timestamp)
-    }
-
-    pub struct Orden {
-        id: u32, //id de la orden
-        productos: Mapping<u32, Producto>, //(cantidad, producto)
-        estado: Estado,
     }
 
     pub enum Rol {
@@ -106,13 +97,97 @@ mod market_place {
         }
     }
 
-
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum ErrorOrden {
+        NoEsVendedor,
+        NoEsComprador,
+        EstadoInvalido,
+        CancelacionNoSolicitada,
+        CancelacionYaPendiente,
+        OrdenCancelada,
+        NoAutorizado,
+    }
     pub struct Orden {
         id: u32,
+        comprador: AccountId,
+        vendedor: AccountId,
         productos: Mapping<u32, Producto>, //lo dejamos asi??
         estado: Estado,
+        total: u32,
+        pendiente_cancelacion: bool,
     }
-
+    impl Orden {
+        pub fn marcar_enviada(&mut self, vendedor: AccountId) -> Result<(), ErrorOrden> {
+            //validar que la orden no este cancelada
+            if self.estado == Estado::Cancelada {
+                return Err(ErrorOrden::OrdenCancelada);
+            }
+            //validar que quien llame sea vendedor
+            if vendedor != self.vendedor {
+                return Err(ErrorOrden::NoEsVendedor);
+            }
+            //validar que la orden este en estado "Pendiente" para poder marcarla como enviada
+            if self.estado != Estado::Pendiente {
+                return Err(ErrorOrden::EstadoInvalido);
+            }
+            //cambiar el estado a "Enviado"
+            self.estado = Estado::Enviado;
+            Ok(())
+        }
+        pub fn marcar_recibida(&mut self, comprador: AccountId) -> Result<(), ErrorOrden> {
+            //validar que la orden no este cancelada
+            if self.estado == Estado::Cancelada {
+                return Err(ErrorOrden::OrdenCancelada);
+            }
+            //validar que quien llama sea el comprador
+            if comprador != self.comprador {
+                return Err(ErrorOrden::NoEsComprador);
+            }
+            //solo se marca como recibida si ya fue enviada
+            if self.estado != Estado::Enviado {
+                return Err(ErrorOrden::EstadoInvalido);
+            }
+            //cambiar el estado a "Recibido"
+            self.estado = Estado::Recibido;
+            Ok(())
+        }
+        pub fn solicitar_cancelacion(&mut self, usuario: AccountId) -> Result<(), ErrorOrden> {
+            //validar que la orden no este ya cancelada
+            if self.estado == Estado::Cancelada {
+                return Err(ErrorOrden::OrdenCancelada);
+            }
+            //validar que quien solicita sea comprador o vendedor
+            if usuario != self.comprador && usuario != self.vendedor {
+                return Err(ErrorOrden::NoAutorizado);
+            }
+            //verificar si antes ya se pidio cancelar
+            if self.pendiente_cancelacion {
+                return Err(ErrorOrden::CancelacionYaPendiente);
+            }
+            //marcar como pendiente la cancelacion
+            self.pendiente_cancelacion = true;
+            OK(())
+        }
+        pub fn confirmar_cancelacion(&mut self, Usuario: AccountId) -> Result<(), ErrorOrden> {
+            //verificar si la orden ya fue cancelada
+            if self.estado == Estado::Cancelada {
+                return Err(ErrorOrden::OrdenCancelada);
+            }
+            //solo un comprador o vendedor puede confirmar la cancelacion
+            if usuario != self.comprador && usuario != self.vendedor {
+                return Err(ErrorOrden::NoAutorizado);
+            }
+            //no se puede confirmar la cancelacion si no hay una cancelacion pendiente
+            if !self.pendiente_cancelacion {
+                return Err(ErrorOrden::CancelacionNoSolicitada);
+            }
+            //cambiar el estado a "Cancelada" y limpiar el flag
+            self.estado = Estado::Cancelada;
+            self.pendiente_cancelacion = false;
+            Ok(())
+        }
+}
     impl MarketPlace {
         /// Crea una nueva instancia del contrato MarketPlace.
         /// # Retorna
