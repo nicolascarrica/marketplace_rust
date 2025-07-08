@@ -1,23 +1,30 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 mod types;
 #[ink::contract]
+
 mod market_place {
-    use ink::{
+    use crate::types::orden::Orden;
+    use crate::types::producto::Producto;
+    use crate::types::usuario::Usuario;
+    use crate::types::errores::ErrorMarketplace;
+    use crate::types::enums::Rol;
+   use ink::{
         storage::Mapping,
         xcm::{v2::Junction::AccountId32, v3::Junction::AccountId32, v4::Junction::AccountKey20},
     };
+
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct MarketPlace {
-        usuarios: Mapping<AccountId, Usuario>,  //aca seria id?
-        productos: Mapping<AccountId, Balance>, //no deberia ser un vec donde solo guarde los productos, porque el producto ya tiene su stock
-        ordenes: Mapping<AccountId, Balance>,   //lo mismo
+        usuarios: Mapping<AccountId, Usuario>,  
+        productos: Mapping<u32, Producto>, 
+        ordenes: Mapping<u32, Orden>,  
         publicaciones: Mapping<AccountId, Publicacion>,
         productos_por_usuario: Mapping<AccountId, Producto>,
-        contador_ordenes: u64,
-        contador_productos: u64,
+        contador_ordenes: u32,
+        contador_productos: u32,
         //aca iria lo de reputacion, creo
     }
 
@@ -25,18 +32,19 @@ mod market_place {
         username: String,
         rol: Rol,
         id: AccountId,
-        calificaciones: Vec<Calificacion>, //creo que seria solo uno, porque ya el usuario sabe quien es, por ende no tiene sentido tener 2 vec o no??
+        calificaciones: Vec<Calificacion>, 
         verificacion: bool,
     }
+
 
     pub struct Calificacion {
         id: AccountId, //o usuario para verificar que solo califico una vez y no mas
         puntaje: u8,
-        id_orden: u64,
+        id_orden: u32,
     }
 
     pub struct Producto {
-        id: AccountId,
+        id: u32, //id del producto
         nombre: String,
         descripcion: String,
         precio: u32,
@@ -44,14 +52,18 @@ mod market_place {
         categoria: Categoria,
     }
 
+
     pub struct Publicacion {
-        id: AccountId,                     //quien lo publica
-        productos: Mapping<u32, Producto>, //la cantidad de productos y el producto, tenia algo mas??
+         id_publicacion: u32,       // ID de la publicación
+         id_vendedor: AccountId,    // ID del vendedor
+         producto: Producto, //lo podriamos poner asi, directamente
+         estado: EstadoPublicacion, // Estado de la publicación
+         fecha_publicacion: u64,    // Fecha de publicación (timestamp, as UNIX timestamp)
     }
 
     pub struct Orden {
-        id: u64,
-        productos: Mapping<u32, Producto>, //lo dejamos asi??
+        id: u32, //id de la orden
+        productos: Mapping<u32, Producto>, //(cantidad, producto)
         estado: Estado,
     }
 
@@ -76,6 +88,12 @@ mod market_place {
         Cancelada,
     }
 
+    pub enum EstadoPublicacion {
+        Activa,
+        Pausada,
+        Eliminada,
+        Agotada,
+    }
     impl Usuario {
         pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
             Self {
@@ -88,22 +106,38 @@ mod market_place {
         }
     }
 
+
+    pub struct Orden {
+        id: u32,
+        productos: Mapping<u32, Producto>, //lo dejamos asi??
+        estado: Estado,
+    }
+
     impl MarketPlace {
+        /// Crea una nueva instancia del contrato MarketPlace.
+        /// # Retorna
+        /// Un contrato con mapas vacíos y contadores en cero.
         #[ink(constructor)]
-        ///aca modificariamos si pasamos a vec o no
         pub fn new() -> Self {
-            Self {
-                usuarios: Mapping::default(),
-                productos: Mapping::default(),
-                publicaciones: Mapping::default(),
-                productos_por_usuario: Mapping::default(),
-                ordenes: Mapping::default(),
-                contador_ordenes: 0,
-                contador_productos: 0,
-            }
+         Self {
+                 usuarios: Mapping::default(),
+                 productos: Mapping::default(),
+                 ordenes: Mapping::default(),
+                 productos_por_usuario: Mapping::default(),
+                 contador_ordenes: 0,
+                 contador_productos: 0,            
+             }
         }
+        /// Registra un nuevo usuario en el sistema con su rol.
+        /// # Parámetros
+        /// - `username`: nombre público visible del usuario.
+        /// - `rol`: rol del usuario (Comprador, Vendedor o Ambos).
+        /// # Retorna
+        /// - `Ok(())` si el registro fue exitoso.
+        /// - `Err(ErrorMarketplace::UsuarioYaRegistrado)` si el usuario ya existe.
 
         #[ink(message)]
+
         pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), String> {
             ///deberiamos ver como manejar el error
             let caller = self.env().caller(); //id
@@ -119,18 +153,156 @@ mod market_place {
         }
 
         #[ink(message)]
-        pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> bool { //o que no devuelva nada, todavia no se
+        pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> bool {
+            //o que no devuelva nada, todavia no se
             let caller = self.env().caller();
-            let mut usuario = match self.usuarios.get(caller) {
-                Some(u) => u,
-                None => return false,
-            };
-
-            usuario.rol = nuevo_rol;
-            self.usuarios.insert(caller, &usuario); //se debe actualizar en el map
-            true
+            if self.usuarios.contains(caller) {
+                return Err(ErrorMarketplace::UsuarioYaRegistrado);
+            }
+            let nuevo = Usuario::new(username, rol);
+            self.usuarios.insert(caller, &nuevo);
+            Ok(())
         }
+        
         //
+
+        //Helper verificar usuario exista
+        fn verificar_usuario(&self, id: AccountId) -> Result<Usuario, String> {
+            self.usuarios
+                .get(&id)
+                .ok_or_else(|| "Usuario no encontrado".to_string())
+        }
+        //Helper verificar que el usuario tenga el rol correcto
+        fn verificar_rol(&self, id: AccountId) -> Result<(), String> {
+            let usuario = self.verificar_usuario(id)?;
+            if usuario.rol == Rol::Ambos || usuario.rol == Rol::Vendedor {
+                Ok(())
+            } else {
+                Err(format!(
+                    "El usuario no tiene el rol requerido: {:?}",
+                    usuario.rol
+                ))
+            }
+        }
+
+        //Helper para validar que el producto tenga un nombre, precio y stock
+        fn validacion_producto(
+            &self,
+            nombre: &String,
+            precio: &u128,
+            stock: &u32,
+        ) -> Result<(), String> {
+            if *stock <= 0 {
+                return Err("El producto no tiene stock".to_string());
+            }
+            if *precio <= 0 {
+                return Err("El precio del producto debe ser mayor a 0".to_string());
+            }
+            if nombre.is_empty() || nombre.trim().is_empty() {
+                return Err("El nombre del producto no puede estar vacío".to_string());
+            }
+            Ok(())
+        }
+        //Helper para obtener una publicacion por id
+        fn obtener_publicacion(&self, id_publicacion: u32) -> Result<Publicacion, String> {
+            self.publicaciones
+                .get(&id_publicacion)
+                .ok_or_else(|| "Publicación no encontrada".to_string())
+        }
+        //Helper para verificar que el usuario es el owner de la publicacion
+        fn verificar_owner_publicacion(
+            &self,
+            id_publicacion: u32,
+            id_vendedor: AccountId,
+        ) -> Result<(), String> {
+            let publicacion = self.obtener_publicacion(id_publicacion)?;
+            if publicacion.id_vendedor != id_vendedor {
+                return Err("No tienes permisos para modificar esta publicación".to_string());
+            }
+            Ok(())
+        }
+
+        //Publicar producto
+        #[ink(message)]
+        pub fn publicar_producto(
+            &mut self,
+            nombre: String,
+            descripcion: String,
+            precio: u128,
+            stock: u32,
+            categoria: Categoria,
+        ) -> Result<(), String> {
+            let id_vendedor = self.env().caller();
+            self.verificar_usuario(id_vendedor)?;
+            self.verificar_rol(id_vendedor)?;
+            self.validacion_producto(&nombre, &precio, &stock)?;
+
+            self.contador_productos += 1;
+            let id_publicacion = self.contador_productos;
+            let nueva_publicacion = Publicacion::new(
+                id_publicacion,
+                id_vendedor,
+                nombre,
+                descripcion,
+                stock,
+                categoria,
+                precio,
+                EstadoPublicacion::Activa,
+                self.env().block_timestamp(),
+            );
+
+            //Guardamos la publicación en el mapping
+            self.publicaciones
+                .insert(id_publicacion, &nueva_publicacion);
+            Ok(())
+        }
+
+        /// Actualizar stock de una publicación
+        #[ink(message)]
+        pub fn actualizar_stock(
+            &mut self,
+            id_publicacion: u32,
+            nuevo_stock: u32,
+        ) -> Result<(), String> {
+            let caller = self.env().caller();
+
+            //Verificamos que la publicación exista
+            let mut publicacion = self.obtener_publicacion(id_publicacion)?;
+            //Verificamos que el caller es el dueño de la publicación
+            self.verificar_owner_publicacion(id_publicacion, caller)?;
+            //Validamos el nuevo stock
+            publicacion.stock = nuevo_stock;
+            self.publicaciones.insert(id_publicacion, &publicacion);
+
+            Ok(())
+        }
+        /// Pausar/Activar una publicación
+        #[ink(message)]
+        pub fn cambiar_estado_publicacion(
+            &mut self,
+            id_publicacion: u32,
+            nuevo_estado: EstadoPublicacion,
+        ) -> Result<(), String> {
+            let caller = self.env().caller();
+
+            //Verificamos que la publicación exista
+            let mut publicacion = self.obtener_publicacion(id_publicacion)?;
+            //Verificamos que el caller es el dueño de la publicación
+            self.verificar_owner_publicacion(id_publicacion, caller)?;
+            //Actualizamos el estado de la publicación
+            publicacion.estado = nuevo_estado;
+            self.publicaciones.insert(id_publicacion, &publicacion);
+
+            Ok(())
+        }
+        /// Obtener lista de publicaciones de un vendedor por su ID
+        #[ink(message)]
+        pub fn obtener_publicaciones_por_vendedor(&self, vendedor: AccountId) -> Vec<Publicacion> {
+            (1..=self.contador_productos)
+                .filter_map(|i| self.publicaciones.get(&i))
+                .filter(|publicacion| publicacion.id_vendedor == vendedor)
+                .collect()
+        }
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
