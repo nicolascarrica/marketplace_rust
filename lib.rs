@@ -417,34 +417,32 @@ mod market_place {
             self.usuarios.insert(caller, &nuevo);
             Ok(())
         }
+    }
 
-        impl Publicacion {
-            pub fn new(
-                id_publicacion: u32,
-                id_vendedor: AccountId,
-                nombre: String,
-                descripcion: String,
-                stock: u32,
-                categoria: Categoria,
-                precio: u128,
-            ) -> Self {
-                Self {
-                    id_publicacion,
+    impl Publicacion {
+        pub fn new(
+            id_publicacion: u32,
+            id_vendedor: AccountId,
+            nombre: String,
+            descripcion: String,
+            stock: u32,
+            categoria: Categoria,
+            precio: u128,
+        ) -> Self {
+            Self {
+                id_publicacion,
+                id_vendedor,
+                producto: Producto {
+                    id: id_publicacion,
                     id_vendedor,
-                    producto: Producto {
-                        id: id_publicacion,
-                        id_vendedor,
-                        nombre,
-                        descripcion,
-                        stock,
-                        categoria,
-                        precio,
-                    },
-                }
+                    nombre,
+                    descripcion,
+                    stock,
+                    categoria,
+                    precio,
+                },
             }
         }
-        //
-
         //Helper verificar usuario exista
         fn verificar_usuario(&self, id: AccountId) -> Result<Usuario, String> {
             self.usuarios
@@ -581,7 +579,7 @@ mod market_place {
                 .collect()
         }
     }
-
+}
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
     /// module and test functions are marked with a `#[test]` attribute.
     /// The below code is technically just normal Rust code.
