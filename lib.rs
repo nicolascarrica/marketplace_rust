@@ -1,16 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-mod types;
-use crate::types::enums::EstadoPublicacion;
-use crate::types::enums::{Categoria, Rol};
 #[ink::contract]
 
-mod market_place {
-    use ink::{
-        storage::Mapping,
-        xcm::{v2::Junction::AccountId32, v3::Junction::AccountId32, v4::Junction::AccountKey20},
-    };
-
-    use crate::types::{usuario::Usuario, Categoria, EstadoPublicacion, Publicacion, Rol};
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
@@ -34,6 +24,7 @@ mod market_place {
         verificacion: bool,
     }
 
+
     pub struct Calificacion {
         id: AccountId, //o usuario para verificar que solo califico una vez y no mas
         puntaje: u8,
@@ -49,6 +40,7 @@ mod market_place {
         categoria: Categoria,
     }
 
+
     pub struct Publicacion {
         id_publicacion: u32,       // ID de la publicación
         id_vendedor: AccountId,    // ID del vendedor
@@ -59,8 +51,11 @@ mod market_place {
 
     pub struct Orden {
         id: u32,                           //id de la orden
-        productos: Mapping<u32, Producto>, //(cantidad, producto)
-        estado: Estado,
+         id_publicacion: u32,       // ID de la publicación
+         id_vendedor: AccountId,    // ID del vendedor
+         producto: Producto, //lo podriamos poner asi, directamente
+         estado: EstadoPublicacion, // Estado de la publicación
+         fecha_publicacion: u64,    // Fecha de publicación (timestamp, as UNIX timestamp)
     }
 
     pub enum Rol {
@@ -192,24 +187,32 @@ mod market_place {
             self.pendiente_cancelacion = false;
             Ok(())
         }
-    }
-
+}
     impl MarketPlace {
+        /// Crea una nueva instancia del contrato MarketPlace.
+        /// # Retorna
+        /// Un contrato con mapas vacíos y contadores en cero.
         #[ink(constructor)]
-        ///aca modificariamos si pasamos a vec o no
         pub fn new() -> Self {
-            Self {
-                usuarios: Mapping::default(),
-                productos: Mapping::default(),
-                publicaciones: Mapping::default(),
-                productos_por_usuario: Mapping::default(),
-                ordenes: Mapping::default(),
-                contador_ordenes: 0,
-                contador_productos: 0,
-            }
+         Self {
+                 usuarios: Mapping::default(),
+                 productos: Mapping::default(),
+                 ordenes: Mapping::default(),
+                 productos_por_usuario: Mapping::default(),
+                 contador_ordenes: 0,
+                 contador_productos: 0,            
+             }
         }
+        /// Registra un nuevo usuario en el sistema con su rol.
+        /// # Parámetros
+        /// - `username`: nombre público visible del usuario.
+        /// - `rol`: rol del usuario (Comprador, Vendedor o Ambos).
+        /// # Retorna
+        /// - `Ok(())` si el registro fue exitoso.
+        /// - `Err(ErrorMarketplace::UsuarioYaRegistrado)` si el usuario ya existe.
 
         #[ink(message)]
+
         pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), String> {
             ///deberiamos ver como manejar el error
             let caller = self.env().caller(); //id
@@ -228,15 +231,14 @@ mod market_place {
         pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> bool {
             //o que no devuelva nada, todavia no se
             let caller = self.env().caller();
-            let mut usuario = match self.usuarios.get(caller) {
-                Some(u) => u,
-                None => return false,
-            };
-
-            usuario.rol = nuevo_rol;
-            self.usuarios.insert(caller, &usuario); //se debe actualizar en el map
-            true
+            if self.usuarios.contains(caller) {
+                return Err(ErrorMarketplace::UsuarioYaRegistrado);
+            }
+            let nuevo = Usuario::new(username, rol);
+            self.usuarios.insert(caller, &nuevo);
+            Ok(())
         }
+        
         //
 
         //Helper verificar usuario exista
