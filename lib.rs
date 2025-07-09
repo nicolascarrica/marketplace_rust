@@ -10,7 +10,16 @@ mod market_place {
     //use ink_e2e::subxt_signer::bip39::serde::de::value::Error;
 
     /// Enums
-    #[derive(Debug,Clone,Copy,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
+    #[derive(
+        Debug,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Rol {
         Comprador,
@@ -18,7 +27,15 @@ mod market_place {
         Ambos,
     }
 
-    #[derive(Debug,Clone,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Categoria {
         Tecnologia,
@@ -27,7 +44,15 @@ mod market_place {
         Alimentos,
         Otros,
     }
-    #[derive(Debug,Clone,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum EstadoOrden {
         Pendiente,
@@ -35,7 +60,15 @@ mod market_place {
         Recibido,
         Cancelada,
     }
-    #[derive(Debug,Clone,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum ErrorOrden {
         NoEsVendedor,
@@ -113,13 +146,23 @@ mod market_place {
                 ErrorMarketplace::CalificacionDuplicada => {
                     "La calificación ya fue registrada para esta orden"
                 }
-                ErrorMarketplace::NoHayPublicaciones => "No hay publicaciones disponibles de ese vendedor",
+                ErrorMarketplace::NoHayPublicaciones => {
+                    "No hay publicaciones disponibles de ese vendedor"
+                }
             };
             write!(f, "{mensaje}")
         }
     }
     // Structs
-    #[derive(Debug,Clone,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Usuario {
         username: String,
@@ -139,7 +182,15 @@ mod market_place {
             }
         }
     }
-    #[derive(Debug,Clone,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Calificacion {
         pub id: AccountId,
@@ -164,7 +215,15 @@ mod market_place {
             }
         }
     }
-    #[derive(Debug,Clone, PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Producto {
         id: u32,
@@ -175,7 +234,14 @@ mod market_place {
         categoria: Categoria,
     }
     impl Producto {
-        pub fn new(id: u32,nombre: String,descripcion: String,precio: u128,stock: u32,categoria: Categoria,) -> Self {
+        pub fn new(
+            id: u32,
+            nombre: String,
+            descripcion: String,
+            precio: u128,
+            stock: u32,
+            categoria: Categoria,
+        ) -> Self {
             Self {
                 id,
                 nombre,
@@ -186,7 +252,15 @@ mod market_place {
             }
         }
     }
-    #[derive(Debug,Clone,PartialEq, Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
+    #[derive(
+        Debug,
+        Clone,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Publicacion {
         id_publicacion: u32,
@@ -211,16 +285,24 @@ mod market_place {
         }
     }
 
-    #[derive(Debug,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout)]
+    #[derive(
+        Debug,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        ink::storage::traits::StorageLayout,
+    )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Orden {
         pub id: u32,
         pub comprador: AccountId,
         pub vendedor: AccountId,
-        pub productos:Vec<(u16, Producto)>,
+        pub productos: Vec<(u32, Producto)>,
         pub estado: EstadoOrden,
         pub total: u128,
         pub pendiente_cancelacion: bool,
+        pub cancelacion_solicitada_por: Option<Rol>,
     }
 
     /// Defines the storage of your contract.
@@ -239,9 +321,15 @@ mod market_place {
         contador_productos: u32,
         //aca iria lo de reputacion, creo
     }
-    
+
     impl Orden {
-        pub fn new(id: u32,comprador: AccountId,vendedor: AccountId,productos: Vec<(u16,Producto)>,total: u128,) -> Self {
+        pub fn new(
+            id: u32,
+            comprador: AccountId,
+            vendedor: AccountId,
+            productos: Vec<(u32, Producto)>,
+            total: u128,
+        ) -> Self {
             Self {
                 id,
                 comprador,
@@ -250,83 +338,11 @@ mod market_place {
                 total,
                 estado: EstadoOrden::Pendiente,
                 pendiente_cancelacion: false,
+                cancelacion_solicitada_por: None,
             }
-        }
-        
-        pub fn marcar_enviada(&mut self, vendedor: AccountId) -> Result<(), ErrorOrden> {
-            //validar que la orden no este cancelada
-            if self.estado == EstadoOrden::Cancelada {
-                return Err(ErrorOrden::OrdenCancelada);
-            }
-            //validar que quien llame sea vendedor
-            if vendedor != self.vendedor {
-                return Err(ErrorOrden::NoEsVendedor);
-            }
-            //validar que la orden este en estado "Pendiente" para poder marcarla como enviada
-            if self.estado != EstadoOrden::Pendiente {
-                return Err(ErrorOrden::EstadoInvalido);
-            }
-            //cambiar el estado a "Enviado"
-            self.estado = EstadoOrden::Enviado;
-            Ok(())
-        }
-        
-        pub fn marcar_recibida(&mut self, comprador: AccountId) -> Result<(), ErrorOrden> {
-            //validar que la orden no este cancelada
-            if self.estado == EstadoOrden::Cancelada {
-                return Err(ErrorOrden::OrdenCancelada);
-            }
-            //validar que quien llama sea el comprador
-            if comprador != self.comprador {
-                return Err(ErrorOrden::NoEsComprador);
-            }
-            //solo se marca como recibida si ya fue enviada
-            if self.estado != EstadoOrden::Enviado {
-                return Err(ErrorOrden::EstadoInvalido);
-            }
-            //cambiar el estado a "Recibido"
-            self.estado = EstadoOrden::Recibido;
-            Ok(())
-        }
-        
-        pub fn solicitar_cancelacion(&mut self, usuario: AccountId) -> Result<(), ErrorOrden> {
-            //validar que la orden no este ya cancelada
-            if self.estado == EstadoOrden::Cancelada {
-                return Err(ErrorOrden::OrdenCancelada);
-            }
-            //validar que quien solicita sea comprador o vendedor
-            if usuario != self.comprador && usuario != self.vendedor {
-                return Err(ErrorOrden::NoAutorizado);
-            }
-            //verificar si antes ya se pidio cancelar
-            if self.pendiente_cancelacion {
-                return Err(ErrorOrden::CancelacionYaPendiente);
-            }
-            //marcar como pendiente la cancelacion
-            self.pendiente_cancelacion = true;
-            Ok(())
-        }
-        
-        pub fn confirmar_cancelacion(&mut self, usuario: AccountId) -> Result<(), ErrorOrden> {
-            //verificar si la orden ya fue cancelada
-            if self.estado == EstadoOrden::Cancelada {
-                return Err(ErrorOrden::OrdenCancelada);
-            }
-            //solo un comprador o vendedor puede confirmar la cancelacion
-            if usuario != self.comprador && usuario != self.vendedor {
-                return Err(ErrorOrden::NoAutorizado);
-            }
-            //no se puede confirmar la cancelacion si no hay una cancelacion pendiente
-            if !self.pendiente_cancelacion {
-                return Err(ErrorOrden::CancelacionNoSolicitada);
-            }
-            //cambiar el estado a "Cancelada" y limpiar el flag
-            self.estado = EstadoOrden::Cancelada;
-            self.pendiente_cancelacion = false;
-            Ok(())
         }
     }
-    
+
     impl MarketPlace {
         /// Crea una nueva instancia del contrato MarketPlace.
         /// # Retorna
@@ -353,9 +369,12 @@ mod market_place {
         /// - `Ok(())` si el registro fue exitoso.
         /// - `Err(ErrorMarketplace::UsuarioYaRegistrado)` si el usuario ya existe.
 
-        
         //FUNCIONES AUXILIARES
-        fn verificar_rol_es_diferente(&self,id: AccountId,nuevo_rol: Rol,) -> Result<(), ErrorMarketplace> {
+        fn verificar_rol_es_diferente(
+            &self,
+            id: AccountId,
+            nuevo_rol: Rol,
+        ) -> Result<(), ErrorMarketplace> {
             let usuario = self.verificar_usuario_existe(id)?;
             if usuario.rol == nuevo_rol {
                 Err(ErrorMarketplace::RolYaAsignado)
@@ -381,7 +400,12 @@ mod market_place {
         }
 
         //Helper para validar que el producto tenga un nombre, precio y stock
-        fn validacion_producto(&self,nombre: &String,precio: &u128,stock: &u32,) -> Result<(), ErrorMarketplace> {
+        fn validacion_producto(
+            &self,
+            nombre: &String,
+            precio: &u128,
+            stock: &u32,
+        ) -> Result<(), ErrorMarketplace> {
             if *stock <= 0 {
                 return Err(ErrorMarketplace::StockInsuficiente);
             }
@@ -395,14 +419,21 @@ mod market_place {
         }
 
         //Helper para obtener una publicacion por id
-        fn obtener_publicacion(&self,id_publicacion: u32,) -> Result<Publicacion, ErrorMarketplace> {
+        fn obtener_publicacion(
+            &self,
+            id_publicacion: u32,
+        ) -> Result<Publicacion, ErrorMarketplace> {
             self.publicaciones
                 .get(&id_publicacion)
                 .ok_or_else(|| ErrorMarketplace::ProductoNoExiste)
         }
 
         //Helper para verificar que el usuario es el owner de la publicacion
-        fn verificar_owner_publicacion(&self,id_publicacion: u32,id_vendedor: AccountId,) -> Result<(), ErrorMarketplace> {
+        fn verificar_owner_publicacion(
+            &self,
+            id_publicacion: u32,
+            id_vendedor: AccountId,
+        ) -> Result<(), ErrorMarketplace> {
             let publicacion = self.obtener_publicacion(id_publicacion)?;
             if publicacion.id_vendedor != id_vendedor {
                 return Err(ErrorMarketplace::NoAutorizado);
@@ -416,7 +447,10 @@ mod market_place {
             self.contador_publicacion
         }
 
-        fn mostrar_publicaciones_propias(&self, id: AccountId) -> Result<Vec<Publicacion>, ErrorMarketplace> {
+        fn mostrar_publicaciones_propias(
+            &self,
+            id: AccountId,
+        ) -> Result<Vec<Publicacion>, ErrorMarketplace> {
             match self.publicaciones_por_vendedor.get(&id) {
                 Some(ids) => {
                     let mut publicaciones = Vec::new();
@@ -430,8 +464,6 @@ mod market_place {
                 None => Err(ErrorMarketplace::NoHayPublicaciones),
             }
         }
-
-
 
         #[ink(message)]
         pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), String> {
@@ -447,7 +479,7 @@ mod market_place {
 
             Ok(()) //no devuelve nada porque solo inserta en el map de sistema
         }
-        
+
         #[ink(message)]
         pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> Result<(), ErrorMarketplace> {
             //o que no devuelva nada, todavia no se
@@ -464,8 +496,8 @@ mod market_place {
 
             self.usuarios.insert(caller, &usuario);
             Ok(())
-        }        
-        
+        }
+
         //Publicar producto
         #[ink(message)]
         pub fn publicar_producto(&mut self, producto: Producto) -> Result<(), ErrorMarketplace> {
@@ -488,41 +520,150 @@ mod market_place {
 
         /// Obtener lista de publicaciones de un vendedor por su ID
         #[ink(message)]
-        pub fn obtener_publicaciones_por_vendedor(&self, vendedor: AccountId) -> Result<Vec<Publicacion>, ErrorMarketplace> {
+        pub fn obtener_publicaciones_por_vendedor(
+            &self,
+            vendedor: AccountId,
+        ) -> Result<Vec<Publicacion>, ErrorMarketplace> {
             self.mostrar_publicaciones_propias(vendedor)
         }
 
         //Ordenar producto
         #[ink(message)]
-        pub fn crear_orden(&mut self, id_publicacion: u32, cant_producto:u16) -> Result<(), ErrorMarketplace> {
+        pub fn crear_orden(
+            &mut self,
+            id_publicacion: u32,
+            cant_producto: u16,
+        ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
 
             // Verificar que el usuario exista
             let usuario = self.verificar_usuario_existe(caller)?;
-    
+
             // Solo compradores o ambos pueden comprar
             if usuario.rol == Rol::Vendedor {
                 return Err(ErrorMarketplace::RolInvalido);
             }
-        
+
             // Verificar que la publicación exista
             let publicacion = self.obtener_publicacion(id_publicacion)?;
 
             // Crear nueva orden
             let nueva_id = self.contador_ordenes;
-            let orden = Orden::
-            new(
+            let orden = Orden::new(
                 nueva_id,
                 caller,
                 publicacion.id_vendedor,
                 vec![(cant_producto, publicacion.producto.clone())],
                 publicacion.producto.precio,
             );
-            
+
             self.ordenes.insert(nueva_id, &orden);
             self.contador_ordenes += 1;
 
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
+            let caller = self.env().caller();
+            // Busca la orden con el ID dado dentro del Mapping ordenes
+            if let Some(mut orden) = self.ordenes.get(id_orden) {
+                //El método get de Mapping te devuelve una copia de la orden
+                //validar que quien llame sea vendedor
+                if caller != self.vendedor {
+                    return Err(ErrorOrden::NoEsVendedor);
+                }
+                //validar que la orden no este cancelada
+                if orden.estado == EstadoOrden::Cancelada {
+                    return Err(ErrorOrden::OrdenCancelada);
+                }
+                //como la orden se pone por default en estado "Pendiente", no necesito preguntar si esta pendiente para cambiarla(?
+
+                //cambiar el estado de la orden a "Enviado"
+                orden.estado = EstadoOrden::Enviado;
+                // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
+                self.ordenes.insert(id_orden, &orden);
+                Ok(())
+            } else {
+                Err(ErrorOrden::OrdenNiExiste)
+            }
+        }
+
+        #[ink(message)]
+        pub fn marcar_orden_como_recibida(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
+            let caller = self.env().caller();
+            // Busca la orden con el ID dado dentro del Mapping ordenes
+            if let Some(mut orden) = self.ordenes.get(id_orden) {
+                //El método get de Mapping te devuelve una copia de la orden
+                //validar que quien llame sea comprador
+                if caller != orden.comprador {
+                    return Err(ErrorOrden::NoEsComprador);
+                }
+                //validar que la orden no este cancelada
+                if orden.estado == EstadoOrden::Cancelada {
+                    return Err(ErrorOrden::OrdenCancelada);
+                }
+                // Solo puede marcarse como recibida si fue enviada previamente
+                if orden.estado != EstadoOrden::Enviado {
+                    return Err(ErrorOrden::EstadoInvalido);
+                }
+                //cambiar el estado de la orden a "Recibido"
+                orden.estado = EstadoOrden::Recibido;
+                // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
+                self.ordenes.insert(id_orden, &orden);
+                Ok(())
+            } else {
+                Err(ErrorOrden::OrdenNoExiste)
+            }
+        }
+
+        #[ink(message)]
+        pub fn solicitar_cancelacion(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
+            let caller = self.env().caller();
+            // Busca la orden con el ID dado dentro del Mapping ordenes
+            if let Some(mut orden) = self.ordenes.get(id_orden) {
+                //El método get de Mapping te devuelve una copia de la orden
+                // Solo el comprador o el vendedor pueden solicitar la cancelación
+                if caller != orden.comprador && caller != orden.vendedor {
+                    return Err(ErrorOrden::NoAutorizado);
+                }
+                //validar que la orden no este cancelada
+                if orden.estado == EstadoOrden::Cancelada {
+                    return Err(ErrorOrden::OrdenCancelada);
+                }
+                // Determina si quien llama es comprador o vendedor
+                let rol_llamada = if caller == orden.comprador {
+                    Rol::Comprador
+                } else {
+                    Rol::Vendedor
+                };
+
+                match orden.cancelacion_solicitada_por {
+                    //nadie solicito la cancelacion antes => se guarda quien la solicita y se deja pendiente
+                    None => {
+                        orden.pendiente_cancelacion = true;
+                        // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
+                        orden.cancelacion_solicitada_por = Some(rol_llamada);
+                        self.ordenes.insert(id_orden, &orden);
+                        Ok(())
+                    }
+                    //alguien ya la habia solicitado la cancelacion => se confirma la cancelacion
+                    Some(previo) if previo != rol_llamada => {
+                        //ambos acordaron => cancelar directamente
+                        orden.estado = EstadoOrden::Cancelada;
+                        //ya se proceso la cancelacion reseteo las variables
+                        orden.pendiente_cancelacion = false;
+                        orden.cancelacion_solicitada_por = None;
+                        // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
+                        self.ordenes.insert(id_orden, &orden);
+                        Ok(())
+                    }
+                    //el mismo usuario ya habia solicitado la cancelacion => no puede repetir la solicitud
+                    Some(_) => Err(ErrorOrden::CancelacionYaPendiente),
+                }
+            } else {
+                Err(ErrorOrden::OrdenNoExiste)
+            }
         }
 
         #[ink(message)]
@@ -532,12 +673,12 @@ mod market_place {
                 .map_or(Vec::new(), |ids_producto| {
                     ids_producto
                         .iter()
-                        .filter_map(|id_producto| self.productos.get(id_producto).map(|p| p.clone()))
+                        .filter_map(|id_producto| {
+                            self.productos.get(id_producto).map(|p| p.clone())
+                        })
                         .collect()
                 })
         }
-
-
     }
 }
 
@@ -555,7 +696,6 @@ mod tests {
     /// Imports all the definitions from the outer scope so we can use them here.
     use super::*;
 
-
     /*     #[ink::test]
     fn default_works() {
         let MarketPlace = MarketPlace::default();
@@ -571,7 +711,7 @@ mod tests {
         assert_eq!(market_place.get(), true);
     } */
 
-   /* 
+    /*
     fn account(id: u8) -> AccountId {
         AccountId::from([id; 32])
     }
