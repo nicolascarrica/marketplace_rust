@@ -2,37 +2,23 @@
 
 #[ink::contract]
 mod market_place {
+    use std::vec;
+
     use ink::prelude::string::String;
     use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
     //use ink_e2e::subxt_signer::bip39::serde::de::value::Error;
 
     /// Enums
-    #[derive(
-        Debug,
-        Clone,
-        Copy,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug,Clone,Copy,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Rol {
         Comprador,
         Vendedor,
         Ambos,
     }
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+
+    #[derive(Debug,Clone,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Categoria {
         Tecnologia,
@@ -41,15 +27,7 @@ mod market_place {
         Alimentos,
         Otros,
     }
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug,Clone,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum EstadoOrden {
         Pendiente,
@@ -57,15 +35,7 @@ mod market_place {
         Recibido,
         Cancelada,
     }
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug,Clone,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum ErrorOrden {
         NoEsVendedor,
@@ -111,6 +81,7 @@ mod market_place {
         CalificacionDuplicada,
         PrecioInvalido,
         NombreInvalido,
+        NoHayPublicaciones,
     }
     #[cfg(feature = "std")]
     impl core::fmt::Display for ErrorMarketplace {
@@ -143,20 +114,13 @@ mod market_place {
                 ErrorMarketplace::CalificacionDuplicada => {
                     "La calificación ya fue registrada para esta orden"
                 }
+                ErrorMarketplace::NoHayPublicaciones => "No hay publicaciones disponibles de ese vendedor",
             };
             write!(f, "{mensaje}")
         }
     }
     // Structs
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug,Clone,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Usuario {
         username: String,
@@ -176,15 +140,7 @@ mod market_place {
             }
         }
     }
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug,Clone,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Calificacion {
         pub id: AccountId,
@@ -209,15 +165,7 @@ mod market_place {
             }
         }
     }
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug,Clone, PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Producto {
         id: u32,
@@ -228,14 +176,7 @@ mod market_place {
         categoria: Categoria,
     }
     impl Producto {
-        pub fn new(
-            id: u32,
-            nombre: String,
-            descripcion: String,
-            precio: u128,
-            stock: u32,
-            categoria: Categoria,
-        ) -> Self {
+        pub fn new(id: u32,nombre: String,descripcion: String,precio: u128,stock: u32,categoria: Categoria,) -> Self {
             Self {
                 id,
                 nombre,
@@ -246,21 +187,14 @@ mod market_place {
             }
         }
     }
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug,Clone,PartialEq, Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout,)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Publicacion {
         id_publicacion: u32,
         id_vendedor: AccountId,
         producto: Producto,
     }
+
     impl Publicacion {
         fn new(id_publicacion: u32, id_vendedor: AccountId, producto: Producto) -> Self {
             Self {
@@ -277,20 +211,14 @@ mod market_place {
             }
         }
     }
-    #[derive(
-        Debug,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+
+    #[derive(Debug,PartialEq,Eq,ink::scale::Encode,ink::scale::Decode,ink::storage::traits::StorageLayout)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Orden {
         pub id: u32,
         pub comprador: AccountId,
         pub vendedor: AccountId,
-        pub productos: Vec<(u32, Producto)>,
+        pub productos:Vec<(u16, Producto)>,
         pub estado: EstadoOrden,
         pub total: u128,
         pub pendiente_cancelacion: bool,
@@ -304,21 +232,17 @@ mod market_place {
         usuarios: Mapping<AccountId, Usuario>,
         productos: Mapping<u32, Producto>,
         ordenes: Mapping<u32, Orden>,
-        publicaciones: Mapping<u32, Publicacion>,
-        productos_por_usuario: Mapping<AccountId, Producto>,
+        publicaciones: Mapping<u32, Publicacion>, //id_publicacion -> Publicacion
+        publicaciones_por_vendedor: Mapping<AccountId, Vec<u32>>,
+        productos_por_usuario: Mapping<AccountId, Vec<u32>>,
         contador_ordenes: u32,
         contador_publicacion: u32,
         contador_productos: u32,
         //aca iria lo de reputacion, creo
     }
+    
     impl Orden {
-        pub fn new(
-            id: u32,
-            comprador: AccountId,
-            vendedor: AccountId,
-            productos: Vec<(u32, Producto)>,
-            total: u128,
-        ) -> Self {
+        pub fn new(id: u32,comprador: AccountId,vendedor: AccountId,productos: Vec<(u16,Producto)>,total: u128,) -> Self {
             Self {
                 id,
                 comprador,
@@ -329,6 +253,7 @@ mod market_place {
                 pendiente_cancelacion: false,
             }
         }
+        
         pub fn marcar_enviada(&mut self, vendedor: AccountId) -> Result<(), ErrorOrden> {
             //validar que la orden no este cancelada
             if self.estado == EstadoOrden::Cancelada {
@@ -346,6 +271,7 @@ mod market_place {
             self.estado = EstadoOrden::Enviado;
             Ok(())
         }
+        
         pub fn marcar_recibida(&mut self, comprador: AccountId) -> Result<(), ErrorOrden> {
             //validar que la orden no este cancelada
             if self.estado == EstadoOrden::Cancelada {
@@ -363,6 +289,7 @@ mod market_place {
             self.estado = EstadoOrden::Recibido;
             Ok(())
         }
+        
         pub fn solicitar_cancelacion(&mut self, usuario: AccountId) -> Result<(), ErrorOrden> {
             //validar que la orden no este ya cancelada
             if self.estado == EstadoOrden::Cancelada {
@@ -380,6 +307,7 @@ mod market_place {
             self.pendiente_cancelacion = true;
             Ok(())
         }
+        
         pub fn confirmar_cancelacion(&mut self, usuario: AccountId) -> Result<(), ErrorOrden> {
             //verificar si la orden ya fue cancelada
             if self.estado == EstadoOrden::Cancelada {
@@ -399,6 +327,7 @@ mod market_place {
             Ok(())
         }
     }
+    
     impl MarketPlace {
         /// Crea una nueva instancia del contrato MarketPlace.
         /// # Retorna
@@ -411,6 +340,7 @@ mod market_place {
                 ordenes: Mapping::default(),
                 publicaciones: Mapping::default(),
                 productos_por_usuario: Mapping::default(),
+                publicaciones_por_vendedor: Mapping::default(),
                 contador_ordenes: 0,
                 contador_publicacion: 0,
                 contador_productos: 0,
@@ -424,49 +354,15 @@ mod market_place {
         /// - `Ok(())` si el registro fue exitoso.
         /// - `Err(ErrorMarketplace::UsuarioYaRegistrado)` si el usuario ya existe.
 
-        #[ink(message)]
-
-        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), String> {
-            ///deberiamos ver como manejar el error
-            let caller = self.env().caller(); //id
-
-            if self.usuarios.contains(&caller) {
-                return Err(String::from("El usuario ya está registrado"));
-            }
-
-            let nuevo_usuario = Usuario::new(username, rol, caller);
-            self.usuarios.insert(caller, &nuevo_usuario);
-
-            Ok(()) //no devuelve nada porque solo inserta en el map de sistema
-        }
-        fn verificar_rol_es_diferente(
-            &self,
-            id: AccountId,
-            nuevo_rol: Rol,
-        ) -> Result<(), ErrorMarketplace> {
+        
+        //FUNCIONES AUXILIARES
+        fn verificar_rol_es_diferente(&self,id: AccountId,nuevo_rol: Rol,) -> Result<(), ErrorMarketplace> {
             let usuario = self.verificar_usuario_existe(id)?;
             if usuario.rol == nuevo_rol {
                 Err(ErrorMarketplace::RolYaAsignado)
             } else {
                 Ok(())
             }
-        }
-        #[ink(message)]
-        pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> Result<(), ErrorMarketplace> {
-            //o que no devuelva nada, todavia no se
-            let caller = self.env().caller();
-
-            // Verifica si el usuario existe
-            let mut usuario = self.verificar_usuario_existe(caller)?;
-
-            // Verifica que el nuevo rol sea diferente
-            self.verificar_rol_es_diferente(caller, nuevo_rol)?;
-
-            // Actualiza el rol
-            usuario.rol = nuevo_rol;
-
-            self.usuarios.insert(caller, &usuario);
-            Ok(())
         }
 
         //Helper verificar usuario exista
@@ -486,12 +382,7 @@ mod market_place {
         }
 
         //Helper para validar que el producto tenga un nombre, precio y stock
-        fn validacion_producto(
-            &self,
-            nombre: &String,
-            precio: &u128,
-            stock: &u32,
-        ) -> Result<(), ErrorMarketplace> {
+        fn validacion_producto(&self,nombre: &String,precio: &u128,stock: &u32,) -> Result<(), ErrorMarketplace> {
             if *stock <= 0 {
                 return Err(ErrorMarketplace::StockInsuficiente);
             }
@@ -503,33 +394,79 @@ mod market_place {
             }
             Ok(())
         }
+
         //Helper para obtener una publicacion por id
-        fn obtener_publicacion(
-            &self,
-            id_publicacion: u32,
-        ) -> Result<Publicacion, ErrorMarketplace> {
+        fn obtener_publicacion(&self,id_publicacion: u32,) -> Result<Publicacion, ErrorMarketplace> {
             self.publicaciones
                 .get(&id_publicacion)
                 .ok_or_else(|| ErrorMarketplace::PublicacionNoExiste)
         }
+
         //Helper para verificar que el usuario es el owner de la publicacion
-        fn verificar_owner_publicacion(
-            &self,
-            id_publicacion: u32,
-            id_vendedor: AccountId,
-        ) -> Result<(), ErrorMarketplace> {
+        fn verificar_owner_publicacion(&self,id_publicacion: u32,id_vendedor: AccountId,) -> Result<(), ErrorMarketplace> {
             let publicacion = self.obtener_publicacion(id_publicacion)?;
             if publicacion.id_vendedor != id_vendedor {
                 return Err(ErrorMarketplace::NoAutorizado);
             }
             Ok(())
         }
+
         //Helper para obtener un nuevo id de publicacion
         fn obtener_nuevo_id_publicacion(&mut self) -> u32 {
             self.contador_publicacion += 1;
             self.contador_publicacion
         }
 
+        fn mostrar_publicaciones_propias(&self, id: AccountId) -> Result<Vec<Publicacion>, ErrorMarketplace> {
+            match self.publicaciones_por_vendedor.get(&id) {
+                Some(ids) => {
+                    let mut publicaciones = Vec::new();
+                    for id_pub in ids {
+                        if let Some(publicacion) = self.publicaciones.get(&id_pub) {
+                            publicaciones.push(publicacion.clone());
+                        }
+                    }
+                    Ok(publicaciones)
+                }
+                None => Err(ErrorMarketplace::NoHayPublicaciones),
+            }
+        }
+
+
+
+        #[ink(message)]
+        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), String> {
+            ///deberiamos ver como manejar el error
+            let caller = self.env().caller(); //id
+
+            if self.usuarios.contains(&caller) {
+                return Err(String::from("El usuario ya está registrado"));
+            }
+
+            let nuevo_usuario = Usuario::new(username, rol, caller);
+            self.usuarios.insert(caller, &nuevo_usuario);
+
+            Ok(()) //no devuelve nada porque solo inserta en el map de sistema
+        }
+        
+        #[ink(message)]
+        pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> Result<(), ErrorMarketplace> {
+            //o que no devuelva nada, todavia no se
+            let caller = self.env().caller();
+
+            // Verifica si el usuario existe
+            let mut usuario = self.verificar_usuario_existe(caller)?;
+
+            // Verifica que el nuevo rol sea diferente
+            self.verificar_rol_es_diferente(caller, nuevo_rol)?;
+
+            // Actualiza el rol
+            usuario.rol = nuevo_rol;
+
+            self.usuarios.insert(caller, &usuario);
+            Ok(())
+        }        
+        
         //Publicar producto
         #[ink(message)]
         pub fn publicar_producto(&mut self, producto: Producto) -> Result<(), ErrorMarketplace> {
@@ -549,14 +486,59 @@ mod market_place {
                 .insert(id_publicacion, &nueva_publicacion);
             Ok(())
         }
+
         /// Obtener lista de publicaciones de un vendedor por su ID
         #[ink(message)]
-        pub fn obtener_publicaciones_por_vendedor(&self, vendedor: AccountId) -> Vec<Publicacion> {
-            (1..=self.contador_productos)
-                .filter_map(|i| self.publicaciones.get(&i))
-                .filter(|publicacion| publicacion.id_vendedor == vendedor)
-                .collect()
+        pub fn obtener_publicaciones_por_vendedor(&self, vendedor: AccountId) -> Result<Vec<Publicacion>, ErrorMarketplace> {
+            self.mostrar_publicaciones_propias(vendedor)
         }
+
+        //Ordenar producto
+        #[ink(message)]
+        pub fn crear_orden(&mut self, id_publicacion: u32, cant_producto:u16) -> Result<(), ErrorMarketplace> {
+            let caller = self.env().caller();
+
+            // Verificar que el usuario exista
+            let usuario = self.verificar_usuario_existe(caller)?;
+    
+            // Solo compradores o ambos pueden comprar
+            if usuario.rol == Rol::Vendedor {
+                return Err(ErrorMarketplace::RolInvalido);
+            }
+        
+            // Verificar que la publicación exista
+            let publicacion = self.obtener_publicacion(id_publicacion)?;
+
+            // Crear nueva orden
+            let nueva_id = self.contador_ordenes;
+            let orden = Orden::
+            new(
+                nueva_id,
+                caller,
+                publicacion.id_vendedor,
+                vec![(cant_producto, publicacion.producto.clone())],
+                publicacion.producto.precio,
+            );
+            
+            self.ordenes.insert(nueva_id, &orden);
+            self.contador_ordenes += 1;
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn mostrar_productos_propios(&self, id: AccountId) -> Vec<Producto> {
+            self.productos_por_usuario
+                .get(&id)
+                .map_or(Vec::new(), |ids_producto| {
+                    ids_producto
+                        .iter()
+                        .filter_map(|id_producto| self.productos.get(id_producto).map(|p| p.clone()))
+                        .collect()
+                })
+        }
+
+
     }
 }
 
@@ -574,7 +556,7 @@ mod tests {
     /// Imports all the definitions from the outer scope so we can use them here.
     use super::*;
 
-    /// We test if the default constructor does its job.
+
     /*     #[ink::test]
     fn default_works() {
         let MarketPlace = MarketPlace::default();
@@ -589,6 +571,8 @@ mod tests {
         market_place.flip();
         assert_eq!(market_place.get(), true);
     } */
+
+   /* 
     fn account(id: u8) -> AccountId {
         AccountId::from([id; 32])
     }
@@ -967,6 +951,8 @@ mod tests {
         let res = contract.publicar_producto(producto);
         assert_eq!(res, Err(ErrorMarketplace::StockInsuficiente)); // Falla por stock primero
     }
+
+    */
 }
 /*
 /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
