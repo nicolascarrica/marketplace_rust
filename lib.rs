@@ -300,10 +300,11 @@ mod market_place {
         pub id: u32,
         pub comprador: AccountId,
         pub vendedor: AccountId,
-        pub productos: Vec<(u16, Producto)>,
+        pub productos: Vec<(u32, Producto)>,
         pub estado: EstadoOrden,
         pub total: u128,
         pub pendiente_cancelacion: bool,
+        pub cancelacion_solicitada_por: Option<Rol>,
     }
 
     /// Defines the storage of your contract.
@@ -328,7 +329,7 @@ mod market_place {
             id: u32,
             comprador: AccountId,
             vendedor: AccountId,
-            productos: Vec<(u16, Producto)>,
+            productos: Vec<(u32, Producto)>,
             total: u128,
         ) -> Self {
             Self {
@@ -339,80 +340,8 @@ mod market_place {
                 total,
                 estado: EstadoOrden::Pendiente,
                 pendiente_cancelacion: false,
+                cancelacion_solicitada_por: None,
             }
-        }
-
-        pub fn marcar_enviada(&mut self, vendedor: AccountId) -> Result<(), ErrorOrden> {
-            //validar que la orden no este cancelada
-            if self.estado == EstadoOrden::Cancelada {
-                return Err(ErrorOrden::OrdenCancelada);
-            }
-            //validar que quien llame sea vendedor
-            if vendedor != self.vendedor {
-                return Err(ErrorOrden::NoEsVendedor);
-            }
-            //validar que la orden este en estado "Pendiente" para poder marcarla como enviada
-            if self.estado != EstadoOrden::Pendiente {
-                return Err(ErrorOrden::EstadoInvalido);
-            }
-            //cambiar el estado a "Enviado"
-            self.estado = EstadoOrden::Enviado;
-            Ok(())
-        }
-
-        pub fn marcar_recibida(&mut self, comprador: AccountId) -> Result<(), ErrorOrden> {
-            //validar que la orden no este cancelada
-            if self.estado == EstadoOrden::Cancelada {
-                return Err(ErrorOrden::OrdenCancelada);
-            }
-            //validar que quien llama sea el comprador
-            if comprador != self.comprador {
-                return Err(ErrorOrden::NoEsComprador);
-            }
-            //solo se marca como recibida si ya fue enviada
-            if self.estado != EstadoOrden::Enviado {
-                return Err(ErrorOrden::EstadoInvalido);
-            }
-            //cambiar el estado a "Recibido"
-            self.estado = EstadoOrden::Recibido;
-            Ok(())
-        }
-
-        pub fn solicitar_cancelacion(&mut self, usuario: AccountId) -> Result<(), ErrorOrden> {
-            //validar que la orden no este ya cancelada
-            if self.estado == EstadoOrden::Cancelada {
-                return Err(ErrorOrden::OrdenCancelada);
-            }
-            //validar que quien solicita sea comprador o vendedor
-            if usuario != self.comprador && usuario != self.vendedor {
-                return Err(ErrorOrden::NoAutorizado);
-            }
-            //verificar si antes ya se pidio cancelar
-            if self.pendiente_cancelacion {
-                return Err(ErrorOrden::CancelacionYaPendiente);
-            }
-            //marcar como pendiente la cancelacion
-            self.pendiente_cancelacion = true;
-            Ok(())
-        }
-
-        pub fn confirmar_cancelacion(&mut self, usuario: AccountId) -> Result<(), ErrorOrden> {
-            //verificar si la orden ya fue cancelada
-            if self.estado == EstadoOrden::Cancelada {
-                return Err(ErrorOrden::OrdenCancelada);
-            }
-            //solo un comprador o vendedor puede confirmar la cancelacion
-            if usuario != self.comprador && usuario != self.vendedor {
-                return Err(ErrorOrden::NoAutorizado);
-            }
-            //no se puede confirmar la cancelacion si no hay una cancelacion pendiente
-            if !self.pendiente_cancelacion {
-                return Err(ErrorOrden::CancelacionNoSolicitada);
-            }
-            //cambiar el estado a "Cancelada" y limpiar el flag
-            self.estado = EstadoOrden::Cancelada;
-            self.pendiente_cancelacion = false;
-            Ok(())
         }
     }
 
@@ -634,6 +563,109 @@ mod market_place {
             self.contador_ordenes += 1;
 
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
+            let caller = self.env().caller();
+            // Busca la orden con el ID dado dentro del Mapping ordenes
+            if let Some(mut orden) = self.ordenes.get(id_orden) {
+                //El método get de Mapping te devuelve una copia de la orden
+                //validar que quien llame sea vendedor
+                if caller != self.vendedor {
+                    return Err(ErrorOrden::NoEsVendedor);
+                }
+                //validar que la orden no este cancelada
+                if orden.estado == EstadoOrden::Cancelada {
+                    return Err(ErrorOrden::OrdenCancelada);
+                }
+                //como la orden se pone por default en estado "Pendiente", no necesito preguntar si esta pendiente para cambiarla(?
+
+                //cambiar el estado de la orden a "Enviado"
+                orden.estado = EstadoOrden::Enviado;
+                // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
+                self.ordenes.insert(id_orden, &orden);
+                Ok(())
+            } else {
+                Err(ErrorOrden::OrdenNiExiste)
+            }
+        }
+
+        #[ink(message)]
+        pub fn marcar_orden_como_recibida(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
+            let caller = self.env().caller();
+            // Busca la orden con el ID dado dentro del Mapping ordenes
+            if let Some(mut orden) = self.ordenes.get(id_orden) {
+                //El método get de Mapping te devuelve una copia de la orden
+                //validar que quien llame sea comprador
+                if caller != orden.comprador {
+                    return Err(ErrorOrden::NoEsComprador);
+                }
+                //validar que la orden no este cancelada
+                if orden.estado == EstadoOrden::Cancelada {
+                    return Err(ErrorOrden::OrdenCancelada);
+                }
+                // Solo puede marcarse como recibida si fue enviada previamente
+                if orden.estado != EstadoOrden::Enviado {
+                    return Err(ErrorOrden::EstadoInvalido);
+                }
+                //cambiar el estado de la orden a "Recibido"
+                orden.estado = EstadoOrden::Recibido;
+                // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
+                self.ordenes.insert(id_orden, &orden);
+                Ok(())
+            } else {
+                Err(ErrorOrden::OrdenNoExiste)
+            }
+        }
+
+        #[ink(message)]
+        pub fn solicitar_cancelacion(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
+            let caller = self.env().caller();
+            // Busca la orden con el ID dado dentro del Mapping ordenes
+            if let Some(mut orden) = self.ordenes.get(id_orden) {
+                //El método get de Mapping te devuelve una copia de la orden
+                // Solo el comprador o el vendedor pueden solicitar la cancelación
+                if caller != orden.comprador && caller != orden.vendedor {
+                    return Err(ErrorOrden::NoAutorizado);
+                }
+                //validar que la orden no este cancelada
+                if orden.estado == EstadoOrden::Cancelada {
+                    return Err(ErrorOrden::OrdenCancelada);
+                }
+                // Determina si quien llama es comprador o vendedor
+                let rol_llamada = if caller == orden.comprador {
+                    Rol::Comprador
+                } else {
+                    Rol::Vendedor
+                };
+
+                match orden.cancelacion_solicitada_por {
+                    //nadie solicito la cancelacion antes => se guarda quien la solicita y se deja pendiente
+                    None => {
+                        orden.pendiente_cancelacion = true;
+                        // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
+                        orden.cancelacion_solicitada_por = Some(rol_llamada);
+                        self.ordenes.insert(id_orden, &orden);
+                        Ok(())
+                    }
+                    //alguien ya la habia solicitado la cancelacion => se confirma la cancelacion
+                    Some(previo) if previo != rol_llamada => {
+                        //ambos acordaron => cancelar directamente
+                        orden.estado = EstadoOrden::Cancelada;
+                        //ya se proceso la cancelacion reseteo las variables
+                        orden.pendiente_cancelacion = false;
+                        orden.cancelacion_solicitada_por = None;
+                        // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
+                        self.ordenes.insert(id_orden, &orden);
+                        Ok(())
+                    }
+                    //el mismo usuario ya habia solicitado la cancelacion => no puede repetir la solicitud
+                    Some(_) => Err(ErrorOrden::CancelacionYaPendiente),
+                }
+            } else {
+                Err(ErrorOrden::OrdenNoExiste)
+            }
         }
 
         #[ink(message)]
