@@ -15,7 +15,6 @@ pub struct Orden {
     pub productos: Vec<(u64, u32)>, // (producto_id, cantidad)
     pub total: u128,
     pub estado: EstadoOrden,
-    pub pendiente_cancelacion: bool,
 }
 
 impl Orden {
@@ -30,7 +29,13 @@ impl Orden {
     ///
     /// # Retorna
     /// Una nueva instancia de `Orden` en estado `Pendiente`.
-    pub fn new(id: u64, comprador: AccountId, vendedor: AccountId, productos: Vec<(u64, u32)>, total: u128) -> Self {
+    pub fn new(
+        id: u64,
+        comprador: AccountId,
+        vendedor: AccountId,
+        productos: Vec<(u64, u32)>,
+        total: u128,
+    ) -> Self {
         Self {
             id,
             comprador,
@@ -38,7 +43,6 @@ impl Orden {
             productos,
             total,
             estado: EstadoOrden::Pendiente,
-            pendiente_cancelacion: false,
         }
     }
 
@@ -81,49 +85,7 @@ impl Orden {
         self.estado = EstadoOrden::Recibido;
         Ok(())
     }
-
-    /// Solicita la cancelación de una orden.
-    ///
-    /// # Parámetros
-    /// - `caller`: Cuenta que solicita la cancelación.
-    ///
-    /// # Retorna
-    /// - `Ok(())` si la solicitud fue registrada.
-    /// - `Err(EstadoInvalido)` si la orden no está en estado `Pendiente`.
-    /// - `Err(NoAutorizado)` si el caller no es una de las partes.
-    pub fn solicitar_cancelacion(&mut self, caller: AccountId) -> Result<(), ErrorMarketplace> {
-        if self.estado != EstadoOrden::Pendiente {
-            return Err(ErrorMarketplace::EstadoInvalido);
-        }
-        if caller != self.comprador && caller != self.vendedor {
-            return Err(ErrorMarketplace::NoAutorizado);
-        }
-        self.pendiente_cancelacion = true;
-        Ok(())
-    }
-
-    /// Confirma la cancelación de la orden.
-    ///
-    /// # Parámetros
-    /// - `caller`: Cuenta que confirma la cancelación.
-    ///
-    /// # Retorna
-    /// - `Ok(())` si se cancela la orden.
-    /// - `Err(CancelacionPendiente)` si no se había solicitado previamente.
-    /// - `Err(NoAutorizado)` si el caller no es parte de la orden.
-    pub fn confirmar_cancelacion(&mut self, caller: AccountId) -> Result<(), ErrorMarketplace> {
-        if !self.pendiente_cancelacion {
-            return Err(ErrorMarketplace::CancelacionPendiente);
-        }
-        if caller != self.comprador && caller != self.vendedor {
-            return Err(ErrorMarketplace::NoAutorizado);
-        }
-        self.estado = EstadoOrden::Cancelada;
-        self.pendiente_cancelacion = false;
-        Ok(())
-    }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,30 +116,6 @@ mod tests {
         let res = orden.marcar_recibida(account(1));
         assert_eq!(res, Ok(()));
         assert_eq!(orden.estado, EstadoOrden::Recibido);
-    }
-
-    #[test]
-    fn test_solicitar_cancelacion_ok() {
-        let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
-        let res = orden.solicitar_cancelacion(account(1));
-        assert_eq!(res, Ok(()));
-        assert!(orden.pendiente_cancelacion);
-    }
-
-    #[test]
-    fn test_confirmar_cancelacion_ok() {
-        let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
-        orden.pendiente_cancelacion = true;
-        let res = orden.confirmar_cancelacion(account(2));
-        assert_eq!(res, Ok(()));
-        assert_eq!(orden.estado, EstadoOrden::Cancelada);
-    }
-
-    #[test]
-    fn test_confirmar_cancelacion_sin_solicitar() {
-        let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
-        let res = orden.confirmar_cancelacion(account(2));
-        assert_eq!(res, Err(ErrorMarketplace::CancelacionPendiente));
     }
 
     #[test]
