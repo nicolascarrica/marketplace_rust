@@ -180,29 +180,26 @@ mod market_place {
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Producto {
-        id: u32,
+        id_producto: u32,
+        id_vendedor: AccountId,
         nombre: String,
         descripcion: String,
-        precio: u128,
         stock: u32,
-        categoria: Categoria,
     }
     impl Producto {
         pub fn new(
-            id: u32,
+            id_producto: u32,
+            id_vendedor: AccountId,
             nombre: String,
             descripcion: String,
-            precio: u128,
             stock: u32,
-            categoria: Categoria,
         ) -> Self {
             Self {
-                id,
+                id_producto,
+                id_vendedor,
                 nombre,
                 descripcion,
-                precio,
                 stock,
-                categoria,
             }
         }
     }
@@ -219,22 +216,31 @@ mod market_place {
     pub struct Publicacion {
         id_publicacion: u32,
         id_vendedor: AccountId,
-        producto: Producto,
+        id_producto: u32,
+        precio: u128,
+        categoria: Categoria,
+        descripcion: String,
+        stock_a_vender: u32,
     }
 
     impl Publicacion {
-        fn new(id_publicacion: u32, id_vendedor: AccountId, producto: Producto) -> Self {
+        fn new(
+            id_publicacion: u32,
+            id_vendedor: AccountId,
+            id_producto: u32,
+            precio: u128,
+            categoria: Categoria,
+            descripcion: String,
+            stock_a_vender: u32,
+        ) -> Self {
             Self {
                 id_publicacion,
                 id_vendedor,
-                producto: Producto::new(
-                    producto.id,
-                    producto.nombre,
-                    producto.descripcion,
-                    producto.precio,
-                    producto.stock,
-                    producto.categoria,
-                ),
+                id_producto,
+                precio,
+                categoria,
+                descripcion,
+                stock_a_vender,
             }
         }
     }
@@ -263,11 +269,12 @@ mod market_place {
     #[ink(storage)]
     pub struct MarketPlace {
         usuarios: Mapping<AccountId, Usuario>,
-        productos: Mapping<u32, Producto>,
+        publicaciones: Mapping<u32, Publicacion>, //id_publicacion -> Publicacion, todas las publicaciones
+        publicaciones_por_vendedor: Mapping<AccountId, Vec<u32>>, //vendedor -> [id_publicacion] busqueda rapida
+        productos: Mapping<u32, Producto>,                        //id_producto -> Producto
         ordenes: Mapping<u32, Orden>,
-        publicaciones: Mapping<u32, Publicacion>, //id_publicacion -> Publicacion
-        publicaciones_por_vendedor: Mapping<AccountId, Vec<u32>>,
-        productos_por_usuario: Mapping<AccountId, Vec<u32>>,
+
+        //Atributos auxiliares
         contador_ordenes: u32,
         contador_publicacion: u32,
         contador_productos: u32,
@@ -304,7 +311,6 @@ mod market_place {
                 productos: Mapping::default(),
                 ordenes: Mapping::default(),
                 publicaciones: Mapping::default(),
-                productos_por_usuario: Mapping::default(),
                 publicaciones_por_vendedor: Mapping::default(),
                 contador_ordenes: 0,
                 contador_publicacion: 0,
@@ -348,15 +354,37 @@ mod market_place {
             nombre: &String,
             precio: &u128,
             stock: &u32,
+            stock_total: &u32,
         ) -> Result<(), ErrorMarketplace> {
-            if *stock <= 0 {
-                return Err(ErrorMarketplace::StockInsuficiente);
+            self.validar_stock_producto(stock_total, stock)?;
+            self.validar_precio_producto(precio)?;
+            self.validar_nombre_producto(nombre)?;
+            Ok(())
+        }
+        //Helper validar nombre de producto
+        fn validar_nombre_producto(&self, nombre: &String) -> Result<(), ErrorMarketplace> {
+            if nombre.is_empty() || nombre.trim().is_empty() {
+                return Err(ErrorMarketplace::NombreInvalido);
             }
+            Ok(())
+        }
+
+        //helper validar precio de producto
+        fn validar_precio_producto(&self, precio: &u128) -> Result<(), ErrorMarketplace> {
             if *precio <= 0 {
                 return Err(ErrorMarketplace::PrecioInvalido);
             }
-            if nombre.is_empty() || nombre.trim().is_empty() {
-                return Err(ErrorMarketplace::NombreInvalido);
+            Ok(())
+        }
+
+        //Helper validar stock de producto
+        fn validar_stock_producto(
+            &self,
+            stock_total: &u32,
+            stock_a_vender: &u32,
+        ) -> Result<(), ErrorMarketplace> {
+            if stock_a_vender > stock_total {
+                return Err(ErrorMarketplace::StockInsuficiente);
             }
             Ok(())
         }
