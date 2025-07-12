@@ -103,6 +103,9 @@ mod market_place {
         PrecioInvalido,
         NombreInvalido,
         NoHayPublicaciones,
+        DescripcionInvalida,
+        IDProductoEnUso,
+        IDPublicacionEnUso,
     }
     #[cfg(feature = "std")]
     impl core::fmt::Display for ErrorMarketplace {
@@ -131,6 +134,9 @@ mod market_place {
                     "No hay publicaciones disponibles de ese vendedor"
                 }
                 ErrorMarketplace::PublicacionNoExiste => "La publicación solicitada no existe",
+                ErrorMarketplace::DescripcionInvalida => "La descripción no puede estar vacía",
+                ErrorMarketplace::IDProductoEnUso => "El ID del producto ya está en uso",
+                ErrorMarketplace::IDPublicacionEnUso => "El ID de la publicación ya está en uso",
             };
             write!(f, "{mensaje}")
         }
@@ -273,7 +279,6 @@ mod market_place {
         publicaciones_por_vendedor: Mapping<AccountId, Vec<u32>>, //vendedor -> [id_publicacion] busqueda rapida
         productos: Mapping<u32, Producto>,                        //id_producto -> Producto
         ordenes: Mapping<u32, Orden>,
-
         //Atributos auxiliares
         contador_ordenes: u32,
         contador_publicacion: u32,
@@ -318,6 +323,38 @@ mod market_place {
             }
         }
 
+        pub fn registrar_producto(
+            &mut self,
+            nombre: String,
+            descripcion: String,
+            stock: u32,
+        ) -> Result<Producto, ErrorMarketplace> {
+            let caller = self.env().caller();
+            //verificar que el usuario sea vendedor
+            self.verificar_rol_vendedor(caller)?;
+
+            //validar producto
+            self.validar_nombre_producto(&nombre)?;
+            self.validar_stock_producto(&stock)?;
+            self.validar_descripcion(&descripcion)?;
+
+            //obtener nuevo id de producto
+            let id_producto = self.obtener_nuevo_id_producto();
+
+            //crear producto
+            let nuevo_producto = Producto::new(
+                id_producto,
+                caller, // id del vendedor
+                nombre.clone(),
+                descripcion.clone(),
+                stock,
+            );
+
+            //insertar en el map de productos
+            self.insertar_producto_en_catalogo(nuevo_producto.clone())?;
+            Ok(nuevo_producto)
+        }
+
         //FUNCIONES AUXILIARES
         fn verificar_rol_es_diferente(
             &self,
@@ -348,23 +385,17 @@ mod market_place {
             }
         }
 
-        //Helper para validar que el producto tenga un nombre, precio y stock
-        fn validacion_producto(
-            &self,
-            nombre: &String,
-            precio: &u128,
-            stock: &u32,
-            stock_total: &u32,
-        ) -> Result<(), ErrorMarketplace> {
-            self.validar_stock_producto(stock_total, stock)?;
-            self.validar_precio_producto(precio)?;
-            self.validar_nombre_producto(nombre)?;
-            Ok(())
-        }
         //Helper validar nombre de producto
         fn validar_nombre_producto(&self, nombre: &String) -> Result<(), ErrorMarketplace> {
             if nombre.is_empty() || nombre.trim().is_empty() {
                 return Err(ErrorMarketplace::NombreInvalido);
+            }
+            Ok(())
+        }
+
+        fn validar_descripcion(&self, descripcion: &String) -> Result<(), ErrorMarketplace> {
+            if descripcion.is_empty() || descripcion.trim().is_empty() {
+                return Err(ErrorMarketplace::DescripcionInvalida);
             }
             Ok(())
         }
@@ -378,12 +409,21 @@ mod market_place {
         }
 
         //Helper validar stock de producto
-        fn validar_stock_producto(
+        fn validar_stock_producto(&self, stock_total: &u32) -> Result<(), ErrorMarketplace> {
+            if *stock_total <= 0 {
+                return Err(ErrorMarketplace::StockInsuficiente);
+            }
+            Ok(())
+        }
+        //Helper Verifica que el stock total del producto sea suficiente para la cantidad a vender.
+        fn validar_stock_publicacion(
             &self,
-            stock_total: &u32,
+            stock_total_producto: &u32,
             stock_a_vender: &u32,
         ) -> Result<(), ErrorMarketplace> {
-            if stock_a_vender > stock_total {
+            self.validar_stock_producto(&stock_total_producto)?;
+            self.validar_stock_producto(&stock_a_vender)?;
+            if *stock_a_vender > *stock_total_producto {
                 return Err(ErrorMarketplace::StockInsuficiente);
             }
             Ok(())
@@ -399,14 +439,21 @@ mod market_place {
                 .ok_or_else(|| ErrorMarketplace::PublicacionNoExiste)
         }
 
-        //Helper para verificar que el usuario es el owner de la publicacion
-        fn verificar_owner_publicacion(
+        //Helper para obtener un producto por id
+        fn obtener_producto(&self, id_producto: u32) -> Result<Producto, ErrorMarketplace> {
+            self.productos
+                .get(&id_producto)
+                .ok_or_else(|| ErrorMarketplace::ProductoNoExiste)
+        }
+
+        //Helper para verificar que el usuario es el owner del producto
+        fn verificar_owner_producto(
             &self,
-            id_publicacion: u32,
             id_vendedor: AccountId,
+            id_producto: u32,
         ) -> Result<(), ErrorMarketplace> {
-            let publicacion = self.obtener_publicacion(id_publicacion)?;
-            if publicacion.id_vendedor != id_vendedor {
+            let producto = self.obtener_producto(id_producto)?;
+            if producto.id_vendedor != id_vendedor {
                 return Err(ErrorMarketplace::NoAutorizado);
             }
             Ok(())
@@ -416,6 +463,101 @@ mod market_place {
         fn obtener_nuevo_id_publicacion(&mut self) -> u32 {
             self.contador_publicacion += 1;
             self.contador_publicacion
+        }
+        //Helper para obotener nuevo id de producto
+        fn obtener_nuevo_id_producto(&mut self) -> u32 {
+            self.contador_productos += 1;
+            self.contador_productos
+        }
+        //Helper para verificar que id no este en uso
+        fn verificar_id_producto_en_uso(&self, id_producto: u32) -> Result<(), ErrorMarketplace> {
+            if self.productos.contains(&id_producto) {
+                return Err(ErrorMarketplace::IDProductoEnUso);
+            }
+            Ok(())
+        }
+        fn verificar_id_publicacion_en_uso(
+            &self,
+            id_publicacion: u32,
+        ) -> Result<(), ErrorMarketplace> {
+            if self.publicaciones.contains(&id_publicacion) {
+                return Err(ErrorMarketplace::IDPublicacionEnUso);
+            }
+            Ok(())
+        }
+        fn verificar_id_publicaciones_por_vendededor_en_uso(
+            &self,
+            id_vendedor: AccountId,
+            id_publicacion: u32,
+        ) -> Result<(), ErrorMarketplace> {
+            let publicaciones = self.publicaciones_por_vendedor.get(&id_vendedor);
+            if let Some(publicaciones) = publicaciones {
+                if publicaciones.contains(&id_publicacion) {
+                    return Err(ErrorMarketplace::IDPublicacionEnUso);
+                }
+            }
+            Ok(())
+        }
+        //Helper para insertar producto en el catalogo de productos
+        fn insertar_producto_en_catalogo(
+            &mut self,
+            producto: Producto,
+        ) -> Result<(), ErrorMarketplace> {
+            // Verificar que el producto no exista
+            self.verificar_id_producto_en_uso(producto.id_producto)?;
+            // Insertar el producto en el mapping
+            self.productos.insert(producto.id_producto, &producto);
+            Ok(())
+        }
+
+        /// Helper inserta una publicación en el mapping de publicaciones por vendedor.
+        fn insertar_publicacion_por_vendedor(
+            &mut self,
+            id_vendedor: AccountId,
+            id_publicacion: u32,
+        ) {
+            // Obtiene el vector existente o crea uno nuevo si no existe
+            let mut publicaciones = self
+                .publicaciones_por_vendedor
+                .get(&id_vendedor)
+                .unwrap_or_else(|| Vec::new());
+
+            publicaciones.push(id_publicacion);
+
+            // Inserta el vector actualizado de vuelta en el mapping
+            self.publicaciones_por_vendedor
+                .insert(id_vendedor, &publicaciones);
+        }
+
+        /// Helper para insertar una publicación en el sistema.
+        fn insertar_publicacion(
+            &mut self,
+            publicacion: Publicacion,
+        ) -> Result<(), ErrorMarketplace> {
+            // Verificar que la publicación no exista
+            if self.publicaciones.contains(&publicacion.id_publicacion) {
+                return Err(ErrorMarketplace::IDPublicacionEnUso);
+            }
+            // Insertar la publicación en el mapping
+            self.publicaciones
+                .insert(publicacion.id_publicacion, &publicacion);
+            Ok(())
+        }
+
+        fn actualizar_stock_producto(
+            &mut self,
+            id_producto: u32,
+            stock_publicacion: u32,
+        ) -> Result<(), ErrorMarketplace> {
+            // Obtener el producto
+            let mut producto = self.obtener_producto(id_producto)?;
+            // Verificar que el stock sea suficiente
+            self.validar_stock_publicacion(&producto.stock, &stock_publicacion)?;
+            // Actualizar el stock del producto
+            producto.stock -= stock_publicacion;
+            // Guardar el producto actualizado en el mapping
+            self.productos.insert(id_producto, &producto);
+            Ok(())
         }
 
         fn mostrar_publicaciones_propias(
@@ -473,23 +615,50 @@ mod market_place {
         #[ink(message)]
         pub fn publicar_producto(
             &mut self,
-            producto: Producto,
-        ) -> Result<Publicacion, ErrorMarketplace> {
+            id_producto: u32,
+            stock_a_vender: u32,
+            precio: u128,
+            categoria: Categoria,
+            descripcion: String,
+        ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
             self.verificar_usuario_existe(caller)?;
             self.verificar_rol_vendedor(caller)?;
-            self.validacion_producto(&producto.nombre, &producto.precio, &producto.stock)?;
+            //Validador que el vendedor sea el owner y que exista
+            self.verificar_owner_producto(caller, id_producto)?;
+            //Validar precio
+            self.validar_precio_producto(&precio)?;
+            //Validar descripcion
+            self.validar_descripcion(&descripcion)?;
+            //Validar stock
+            self.validar_stock_producto(&stock_a_vender)?;
+            //Validar stock del producto
+            let producto = self.obtener_producto(id_producto)?;
+            self.validar_stock_publicacion(&producto.stock, &stock_a_vender)?;
 
             // Generamos un nuevo ID para la publicación
             let id_publicacion = self.obtener_nuevo_id_publicacion();
 
             // Creamos una nueva publicación
-            let nueva_publicacion = Publicacion::new(id_publicacion, caller, producto.clone());
+            let nueva_publicacion = Publicacion::new(
+                id_publicacion,
+                caller, // id del vendedor
+                id_producto,
+                precio,
+                categoria,
+                descripcion.clone(),
+                stock_a_vender,
+            );
 
-            //Guardamos la publicación en el mapping
-            self.publicaciones
-                .insert(id_publicacion, &nueva_publicacion);
-            Ok(nueva_publicacion)
+            //Guardamos la publicación en el mapping de publicaciones
+            self.insertar_publicacion(nueva_publicacion.clone())?;
+
+            //Guardamos la publicación en el mapping de publicaciones por vendedor
+            self.insertar_publicacion_por_vendedor(caller, id_publicacion);
+
+            // Actualizamos el stock del producto
+            self.actualizar_stock_producto(id_producto, stock_a_vender)?;
+            Ok(())
         }
 
         /// Obtener lista de publicaciones de un vendedor por su ID
