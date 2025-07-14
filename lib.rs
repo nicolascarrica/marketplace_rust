@@ -2,14 +2,12 @@
 
 #[ink::contract]
 mod market_place {
-    use std::vec;
-
     use ink::prelude::string::String;
-    use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
-    //use ink_e2e::subxt_signer::bip39::serde::de::value::Error;
 
     /// Enums
+    
+    /// Representa los roles posibles que puede tener un usuario dentro del marketplace.
     #[derive(
         Debug,
         Clone,
@@ -18,15 +16,15 @@ mod market_place {
         Eq,
         ink::scale::Encode,
         ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
     )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout, scale_info::TypeInfo))]
     pub enum Rol {
         Comprador,
         Vendedor,
         Ambos,
     }
 
+    /// Categorías posibles para los productos.
     #[derive(
         Debug,
         Clone,
@@ -34,9 +32,8 @@ mod market_place {
         Eq,
         ink::scale::Encode,
         ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
     )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout, scale_info::TypeInfo))]
     pub enum Categoria {
         Tecnologia,
         Indumentaria,
@@ -44,6 +41,8 @@ mod market_place {
         Alimentos,
         Otros,
     }
+
+    /// Representa los estados posibles de una orden de compra.
     #[derive(
         Debug,
         Clone,
@@ -51,46 +50,18 @@ mod market_place {
         Eq,
         ink::scale::Encode,
         ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
     )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout, scale_info::TypeInfo))]
     pub enum EstadoOrden {
         Pendiente,
         Enviado,
         Recibido,
         Cancelada,
     }
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub enum ErrorOrden {
-        NoEsVendedor,
-        NoEsComprador,
-        EstadoInvalido,
-        CancelacionNoSolicitada,
-        CancelacionYaPendiente,
-        OrdenCancelada,
-        NoAutorizado,
-        UsuarioYaRegistrado,
-        UsuarioNoExiste,
-        RolInvalido,
-        ProductoNoExiste,
-        StockInsuficiente,
-        OrdenNoExiste,
-        YaCalificado,
-        PuntajeInvalido,
-        CancelacionPendiente,
-        CalificacionDuplicada,
-    }
 
-    //Enum Errores
+
+    /// Errores del Marketplace
+    /// Define los posibles errores que pueden ocurrir en el marketplace.
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, PartialEq)]
@@ -98,64 +69,43 @@ mod market_place {
     pub enum ErrorMarketplace {
         UsuarioYaRegistrado,
         UsuarioNoExiste,
-        RolInvalido,
-        RolYaAsignado,
         ProductoNoExiste,
         PublicacionNoExiste,
         StockInsuficiente,
+        RolInvalido,
         OrdenNoExiste,
-        NoEsComprador,
-        NoEsVendedor,
-        EstadoInvalido,
-        YaCalificado,
-        PuntajeInvalido,
-        NoAutorizado,
-        CancelacionPendiente,
-        CalificacionDuplicada,
         PrecioInvalido,
         NombreInvalido,
-        NoHayPublicaciones,
+        SaldoInsuficiente,
+        TransferenciaFallida,
     }
+
+    /// Implementación del trait `core::fmt::Display` para el enum `ErrorMarketplace`.
+    /// Permite mostrar mensajes de error legibles para el usuario.
+    /// Requiere el feature "std" para poder usar `core::fmt::Display`.
     #[cfg(feature = "std")]
     impl core::fmt::Display for ErrorMarketplace {
         fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            // use ink_e2e::subxt_signer::bip39::serde::de::value::Error;
-
-            let mensaje = match self {
+            let msg = match self {
                 ErrorMarketplace::UsuarioYaRegistrado => "El usuario ya está registrado",
-                ErrorMarketplace::UsuarioNoExiste => "El usuario no fue encontrado",
-                ErrorMarketplace::RolYaAsignado => "El rol ya está asignado a este usuario",
-                ErrorMarketplace::RolInvalido => "Rol inválido",
-                ErrorMarketplace::ProductoNoExiste => "Producto no encontrado",
-                ErrorMarketplace::StockInsuficiente => "No hay stock suficiente",
+                ErrorMarketplace::UsuarioNoExiste => "El usuario no existe",
+                ErrorMarketplace::ProductoNoExiste => "El producto no existe",
+                ErrorMarketplace::PublicacionNoExiste => "La publicación no existe",
+                ErrorMarketplace::StockInsuficiente => "No hay suficiente stock",
+                ErrorMarketplace::RolInvalido => "Rol no autorizado para esta acción",
                 ErrorMarketplace::OrdenNoExiste => "La orden no existe",
-                ErrorMarketplace::NoEsComprador => {
-                    "Solo los compradores pueden realizar esta acción"
-                }
-                ErrorMarketplace::PrecioInvalido => {
-                    "El precio debe ser mayor a cero y no puede estar vacío"
-                }
-                ErrorMarketplace::NombreInvalido => "El nombre no puede estar vacío",
-                ErrorMarketplace::NoEsVendedor => "Solo los vendedores pueden realizar esta acción",
-                ErrorMarketplace::EstadoInvalido => "El estado no es válido para esta acción",
-                ErrorMarketplace::YaCalificado => "El usuario ya fue calificado para esta orden",
-                ErrorMarketplace::PuntajeInvalido => "Puntaje inválido. Debe estar entre 1 y 5",
-                ErrorMarketplace::NoAutorizado => "No tiene autorización para realizar esta acción",
-                ErrorMarketplace::CancelacionPendiente => {
-                    "La orden ya tiene una solicitud de cancelación pendiente"
-                }
-                ErrorMarketplace::CalificacionDuplicada => {
-                    "La calificación ya fue registrada para esta orden"
-                }
-                ErrorMarketplace::NoHayPublicaciones => {
-                    "No hay publicaciones disponibles de ese vendedor"
-                }
-                ErrorMarketplace::PublicacionNoExiste => "La publicación solicitada no existe",
+                ErrorMarketplace::PrecioInvalido => "Precio o cantidad no válidos",
+                ErrorMarketplace::NombreInvalido => "Nombre del producto inválido",
+                ErrorMarketplace::SaldoInsuficiente => "Saldo insuficiente para la compra",
+                ErrorMarketplace::TransferenciaFallida => "No se pudo transferir al vendedor",
             };
-            write!(f, "{mensaje}")
+            write!(f, "{msg}")
         }
     }
+
+
     // Structs
+
     #[derive(
         Debug,
         Clone,
@@ -163,36 +113,26 @@ mod market_place {
         Eq,
         ink::scale::Encode,
         ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
     )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout, scale_info::TypeInfo))]
     pub struct Usuario {
         username: String,
         rol: Rol,
         id: AccountId,
-        calificaciones: Vec<Calificacion>,
         verificacion: bool,
     }
     impl Usuario {
-        /// Registra un nuevo usuario en el sistema con su rol.
-        /// # Parámetros
-        /// - `username`: nombre público visible del usuario.
-        /// - `rol`: rol del usuario (Comprador, Vendedor o Ambos).
-        /// # Retorna
-        /// - `Ok(())` si el registro fue exitoso.
-        /// - `Err(ErrorMarketplace::UsuarioYaRegistrado)` si el usuario ya existe.
         pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
             Self {
                 username,
                 rol,
                 id,
-                calificaciones: Vec::new(),
                 verificacion: true,
             }
         }
-
-
     }
+
+
     #[derive(
         Debug,
         Clone,
@@ -200,48 +140,13 @@ mod market_place {
         Eq,
         ink::scale::Encode,
         ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
     )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub struct Calificacion {
-        pub id: AccountId,
-        pub puntaje: u8,
-        pub id_orden: u32,
-    }
-    impl Calificacion {
-        /// Crea una nueva calificación válida.
-        ///
-        /// # Parámetros
-        /// - `calificador`: cuenta que realiza la calificación
-        /// - `puntaje`: entero entre 1 y 5
-        /// - `orden_id`: ID de la orden asociada
-        ///
-        /// # Retorna
-        /// - Instancia de `Calificacion`
-        pub fn new(calificador: AccountId, puntaje: u8, orden_id: u64) -> Self {
-            Self {
-                id: calificador,
-                puntaje,
-                id_orden: orden_id as u32,
-            }
-        }
-    }
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout, scale_info::TypeInfo))]
     pub struct Producto {
         id: u32,
         nombre: String,
         descripcion: String,
         precio: u128,
-        stock: u32,
         categoria: Categoria,
     }
     impl Producto {
@@ -250,7 +155,6 @@ mod market_place {
             nombre: String,
             descripcion: String,
             precio: u128,
-            stock: u32,
             categoria: Categoria,
         ) -> Self {
             Self {
@@ -258,7 +162,6 @@ mod market_place {
                 nombre,
                 descripcion,
                 precio,
-                stock,
                 categoria,
             }
         }
@@ -270,28 +173,23 @@ mod market_place {
         Eq,
         ink::scale::Encode,
         ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
+        
     )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout, scale_info::TypeInfo))]
     pub struct Publicacion {
-        id_publicacion: u32,
-        id_vendedor: AccountId,
-        producto: Producto,
+        id: u32,
+        producto_id: u32,
+        vendedor: AccountId,
+        stock_publicacion: u32,
     }
 
     impl Publicacion {
-        fn new(id_publicacion: u32, id_vendedor: AccountId, producto: Producto) -> Self {
+        pub fn new(id: u32, vendedor: AccountId, producto_id: u32, stock_publicacion: u32) -> Self {
             Self {
-                id_publicacion,
-                id_vendedor,
-                producto: Producto::new(
-                    producto.id,
-                    producto.nombre,
-                    producto.descripcion,
-                    producto.precio,
-                    producto.stock,
-                    producto.categoria,
-                ),
+                id,
+                producto_id,
+                vendedor,
+                stock_publicacion,
             }
         }
     }
@@ -302,18 +200,30 @@ mod market_place {
         Eq,
         ink::scale::Encode,
         ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
     )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout, scale_info::TypeInfo))]
     pub struct Orden {
-        pub id: u32,
-        pub comprador: AccountId,
-        pub vendedor: AccountId,
-        pub productos: Vec<(u32, Producto)>,
-        pub estado: EstadoOrden,
-        pub total: u128,
-        pub pendiente_cancelacion: bool,
-        pub cancelacion_solicitada_por: Option<Rol>,
+        id: u32,
+        comprador: AccountId,
+        vendedor: AccountId,
+        producto_id: u32,
+        cantidad: u32,
+        total: u128,
+        estado: EstadoOrden,
+    }
+
+    impl Orden {
+        pub fn new(id: u32, comprador: AccountId, vendedor: AccountId, producto_id: u32, cantidad: u32, total: u128) -> Self {
+            Self {
+                id,
+                comprador,
+                vendedor,
+                producto_id,
+                cantidad,
+                total,
+                estado: EstadoOrden::Pendiente,
+            }
+        }
     }
 
     /// Defines the storage of your contract.
@@ -323,35 +233,12 @@ mod market_place {
     pub struct MarketPlace {
         usuarios: Mapping<AccountId, Usuario>,
         productos: Mapping<u32, Producto>,
+        stock: Mapping<(u32, AccountId), u32>,
+        publicaciones: Mapping<u32, Publicacion>,
         ordenes: Mapping<u32, Orden>,
-        publicaciones: Mapping<u32, Publicacion>, //id_publicacion -> Publicacion
-        publicaciones_por_vendedor: Mapping<AccountId, Vec<u32>>,
-        productos_por_usuario: Mapping<AccountId, Vec<u32>>,
-        contador_ordenes: u32,
-        contador_publicacion: u32,
         contador_productos: u32,
-        //aca iria lo de reputacion, creo
-    }
-
-    impl Orden {
-        pub fn new(
-            id: u32,
-            comprador: AccountId,
-            vendedor: AccountId,
-            productos: Vec<(u32, Producto)>,
-            total: u128,
-        ) -> Self {
-            Self {
-                id,
-                comprador,
-                vendedor,
-                productos,
-                total,
-                estado: EstadoOrden::Pendiente,
-                pendiente_cancelacion: false,
-                cancelacion_solicitada_por: None,
-            }
-        }
+        contador_publicaciones: u32,
+        contador_ordenes: u32,
     }
 
     impl MarketPlace {
@@ -363,325 +250,129 @@ mod market_place {
             Self {
                 usuarios: Mapping::default(),
                 productos: Mapping::default(),
-                ordenes: Mapping::default(),
+                stock: Mapping::default(),
                 publicaciones: Mapping::default(),
-                productos_por_usuario: Mapping::default(),
-                publicaciones_por_vendedor: Mapping::default(),
-                contador_ordenes: 0,
-                contador_publicacion: 0,
+                ordenes: Mapping::default(),
                 contador_productos: 0,
-            }
-        }
-
-        //FUNCIONES AUXILIARES
-        fn verificar_rol_es_diferente(
-            &self,
-            id: AccountId,
-            nuevo_rol: Rol,
-        ) -> Result<(), ErrorMarketplace> {
-            let usuario = self.verificar_usuario_existe(id)?;
-            if usuario.rol == nuevo_rol {
-                Err(ErrorMarketplace::RolYaAsignado)
-            } else {
-                Ok(())
-            }
-        }
-
-        //Helper verificar usuario exista
-        fn verificar_usuario_existe(&self, id: AccountId) -> Result<Usuario, ErrorMarketplace> {
-            self.usuarios
-                .get(&id)
-                .ok_or(ErrorMarketplace::UsuarioNoExiste)
-        }
-        //Helper verificar que el usuario tenga el rol correcto
-        fn verificar_rol_vendedor(&self, id: AccountId) -> Result<(), ErrorMarketplace> {
-            let usuario = self.verificar_usuario_existe(id)?;
-            if usuario.rol == Rol::Ambos || usuario.rol == Rol::Vendedor {
-                Ok(())
-            } else {
-                Err(ErrorMarketplace::RolInvalido)
-            }
-        }
-
-        //Helper para validar que el producto tenga un nombre, precio y stock
-        fn validacion_producto(
-            &self,
-            nombre: &String,
-            precio: &u128,
-            stock: &u32,
-        ) -> Result<(), ErrorMarketplace> {
-            if *stock <= 0 {
-                return Err(ErrorMarketplace::StockInsuficiente);
-            }
-            if *precio <= 0 {
-                return Err(ErrorMarketplace::PrecioInvalido);
-            }
-            if nombre.is_empty() || nombre.trim().is_empty() {
-                return Err(ErrorMarketplace::NombreInvalido);
-            }
-            Ok(())
-        }
-
-        //Helper para obtener una publicacion por id
-        fn obtener_publicacion(
-            &self,
-            id_publicacion: u32,
-        ) -> Result<Publicacion, ErrorMarketplace> {
-            self.publicaciones
-                .get(&id_publicacion)
-                .ok_or_else(|| ErrorMarketplace::PublicacionNoExiste)
-        }
-
-        //Helper para verificar que el usuario es el owner de la publicacion
-        fn verificar_owner_publicacion(
-            &self,
-            id_publicacion: u32,
-            id_vendedor: AccountId,
-        ) -> Result<(), ErrorMarketplace> {
-            let publicacion = self.obtener_publicacion(id_publicacion)?;
-            if publicacion.id_vendedor != id_vendedor {
-                return Err(ErrorMarketplace::NoAutorizado);
-            }
-            Ok(())
-        }
-
-        //Helper para obtener un nuevo id de publicacion
-        fn obtener_nuevo_id_publicacion(&mut self) -> u32 {
-            self.contador_publicacion += 1;
-            self.contador_publicacion
-        }
-
-        fn mostrar_publicaciones_propias(
-            &self,
-            id: AccountId,
-        ) -> Result<Vec<Publicacion>, ErrorMarketplace> {
-            match self.publicaciones_por_vendedor.get(&id) {
-                Some(ids) => {
-                    let mut publicaciones = Vec::new();
-                    for id_pub in ids {
-                        if let Some(publicacion) = self.publicaciones.get(&id_pub) {
-                            publicaciones.push(publicacion.clone());
-                        }
-                    }
-                    Ok(publicaciones)
-                }
-                None => Err(ErrorMarketplace::NoHayPublicaciones),
+                contador_publicaciones: 0,
+                contador_ordenes: 0,
             }
         }
 
         #[ink(message)]
-        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), String> {
-            //deberiamos ver como manejar el error
-            let caller = self.env().caller(); //id
-
+        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), ErrorMarketplace> {
+            let caller = self.env().caller();
             if self.usuarios.contains(&caller) {
-                return Err(String::from("El usuario ya está registrado"));
+                return Err(ErrorMarketplace::UsuarioYaRegistrado);
             }
-
-            let nuevo_usuario = Usuario::new(username, rol, caller);
-            self.usuarios.insert(caller, &nuevo_usuario);
-
-            Ok(()) //no devuelve nada porque solo inserta en el map de sistema
-        }
-
-        #[ink(message)]
-        pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> Result<(), ErrorMarketplace> {
-            //o que no devuelva nada, todavia no se
-            let caller = self.env().caller();
-
-            // Verifica si el usuario existe
-            let mut usuario = self.verificar_usuario_existe(caller)?;
-
-            // Verifica que el nuevo rol sea diferente
-            self.verificar_rol_es_diferente(caller, nuevo_rol)?;
-
-            // Actualiza el rol
-            usuario.rol = nuevo_rol;
-
-            self.usuarios.insert(caller, &usuario);
+            self.usuarios.insert(caller, &Usuario::new(username, rol, caller));
             Ok(())
         }
 
-        //Publicar producto
         #[ink(message)]
-        pub fn publicar_producto(&mut self, producto: Producto) -> Result<(), ErrorMarketplace> {
-            let caller = self.env().caller();
-            self.verificar_usuario_existe(caller)?;
-            self.verificar_rol_vendedor(caller)?;
-            self.validacion_producto(&producto.nombre, &producto.precio, &producto.stock)?;
-
-            // Generamos un nuevo ID para la publicación
-            let id_publicacion = self.obtener_nuevo_id_publicacion();
-
-            // Creamos una nueva publicación
-            let nueva_publicacion = Publicacion::new(id_publicacion, caller, producto.clone());
-
-            //Guardamos la publicación en el mapping
-            self.publicaciones
-                .insert(id_publicacion, &nueva_publicacion);
-            Ok(())
-        }
-
-        /// Obtener lista de publicaciones de un vendedor por su ID
-        #[ink(message)]
-        pub fn obtener_publicaciones_por_vendedor(
-            &self,
-            vendedor: AccountId,
-        ) -> Result<Vec<Publicacion>, ErrorMarketplace> {
-            self.mostrar_publicaciones_propias(vendedor)
-        }
-
-        //Ordenar producto
-        #[ink(message)]
-        pub fn crear_orden(
+        pub fn agregar_producto(
             &mut self,
-            id_publicacion: u32,
-            cant_producto: u16,
-        ) -> Result<(), ErrorMarketplace> {
+            nombre: String,
+            descripcion: String,
+            precio: u128,
+            categoria: Categoria,
+            cantidad: u32,
+        ) -> Result<u32, ErrorMarketplace> {
             let caller = self.env().caller();
+            let usuario = match self.usuarios.get(caller) {
+                Some(user) => user,
+                None => return Err(ErrorMarketplace::UsuarioNoExiste),
+            };
 
-            // Verificar que el usuario exista
-            let usuario = self.verificar_usuario_existe(caller)?;
-
-            // Solo compradores o ambos pueden comprar
-            if usuario.rol == Rol::Vendedor {
+            if usuario.rol == Rol::Comprador {
                 return Err(ErrorMarketplace::RolInvalido);
             }
+            if nombre.trim().is_empty() || precio == 0 || cantidad == 0 {
+                return Err(ErrorMarketplace::PrecioInvalido);
+            }
 
-            // Verificar que la publicación exista
-            let publicacion = self.obtener_publicacion(id_publicacion)?;
+            self.contador_productos = self.contador_productos.saturating_add(1);
+            let producto = Producto::new(self.contador_productos, nombre, descripcion, precio, categoria);
+            self.productos.insert(producto.id, &producto);
+            self.stock.insert((producto.id, caller), &cantidad);
+            Ok(producto.id)
+        }
 
-            // Crear nueva orden
-            let nueva_id = self.contador_ordenes;
-            let orden = Orden::new(
-                nueva_id,
-                caller,
-                publicacion.id_vendedor,
-                vec![(cant_producto, publicacion.producto.clone())],
-                publicacion.producto.precio,
-            );
 
-            self.ordenes.insert(nueva_id, &orden);
-            self.contador_ordenes += 1;
+        #[ink(message)]
+        pub fn publicar_producto(&mut self, producto_id: u32, cantidad: u32) -> Result<u32, ErrorMarketplace> {
+            let caller = self.env().caller();
+
+            // Verificar existencia del usuario
+            let _usuario = self.usuarios.get(caller).ok_or(ErrorMarketplace::UsuarioNoExiste)?;
+
+            // Verificar existencia del producto
+            let _producto = self.productos.get(producto_id).ok_or(ErrorMarketplace::ProductoNoExiste)?;
+
+            // Verificar stock disponible en depósito
+            let clave = (producto_id, caller);
+            let stock_opcion = self.stock.get(clave);
+            let stock_deposito = match stock_opcion {
+                Some(valor) => valor,
+                None => return Err(ErrorMarketplace::StockInsuficiente),
+            };
+
+            if cantidad == 0 || stock_deposito < cantidad {
+                return Err(ErrorMarketplace::StockInsuficiente);
+            }
+
+            // Descontar del depósito
+            let nuevo_stock = stock_deposito.saturating_sub(cantidad);
+            self.stock.insert(clave, &nuevo_stock);
+
+            // Crear publicación
+            self.contador_publicaciones = self.contador_publicaciones.saturating_add(1);
+            let publicacion = Publicacion {
+                id: self.contador_publicaciones,
+                producto_id,
+                vendedor: caller,
+                stock_publicacion: cantidad,
+            };
+            self.publicaciones.insert(publicacion.id, &publicacion);
+        
+            Ok(publicacion.id)
+        }
+
+        #[ink(message, payable)]
+        pub fn crear_orden(&mut self, publicacion_id: u32, cantidad: u32) -> Result<(), ErrorMarketplace> {
+            let comprador = self.env().caller();
+            let pago = self.env().transferred_value();
+
+            let _comprador_data = self.usuarios.get(&comprador).ok_or(ErrorMarketplace::UsuarioNoExiste)?;
+            let mut publicacion = self.publicaciones.get(&publicacion_id).ok_or(ErrorMarketplace::PublicacionNoExiste)?;
+            let vendedor = publicacion.vendedor;
+            let _vendedor_data = self.usuarios.get(&vendedor).ok_or(ErrorMarketplace::UsuarioNoExiste)?;
+
+            if cantidad == 0 || publicacion.stock_publicacion < cantidad {
+                return Err(ErrorMarketplace::StockInsuficiente);
+            }
+
+            let producto = self.productos.get(&publicacion.producto_id).ok_or(ErrorMarketplace::ProductoNoExiste)?;
+
+            let total = producto.precio.checked_mul(cantidad as u128).ok_or(ErrorMarketplace::PrecioInvalido)?;
+            if pago < total {
+                return Err(ErrorMarketplace::SaldoInsuficiente);
+            }
+
+            // Descontamos stock de la publicación
+            publicacion.stock_publicacion = publicacion.stock_publicacion.saturating_sub(cantidad);
+
+            self.publicaciones.insert(publicacion_id, &publicacion);
+
+            self.contador_ordenes = self.contador_ordenes.saturating_add(1);
+
+            let orden = Orden::new(self.contador_ordenes, comprador, vendedor, producto.id, cantidad, total);
+            self.ordenes.insert(self.contador_ordenes, &orden);
+
+            // Transferir dinero al vendedor
+            self.env().transfer(vendedor, total).map_err(|_| ErrorMarketplace::TransferenciaFallida)?;
 
             Ok(())
-        }
-
-        #[ink(message)]
-        pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
-            let caller = self.env().caller();
-            // Busca la orden con el ID dado dentro del Mapping ordenes
-            if let Some(mut orden) = self.ordenes.get(id_orden) {
-                //El método get de Mapping te devuelve una copia de la orden
-                //validar que quien llame sea vendedor
-                if caller != self.vendedor {
-                    return Err(ErrorOrden::NoEsVendedor);
-                }
-                //validar que la orden no este cancelada
-                if orden.estado == EstadoOrden::Cancelada {
-                    return Err(ErrorOrden::OrdenCancelada);
-                }
-                //como la orden se pone por default en estado "Pendiente", no necesito preguntar si esta pendiente para cambiarla(?
-
-                //cambiar el estado de la orden a "Enviado"
-                orden.estado = EstadoOrden::Enviado;
-                // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
-                self.ordenes.insert(id_orden, &orden);
-                Ok(())
-            } else {
-                Err(ErrorOrden::OrdenNiExiste)
-            }
-        }
-
-        #[ink(message)]
-        pub fn marcar_orden_como_recibida(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
-            let caller = self.env().caller();
-            // Busca la orden con el ID dado dentro del Mapping ordenes
-            if let Some(mut orden) = self.ordenes.get(id_orden) {
-                //El método get de Mapping te devuelve una copia de la orden
-                //validar que quien llame sea comprador
-                if caller != orden.comprador {
-                    return Err(ErrorOrden::NoEsComprador);
-                }
-                //validar que la orden no este cancelada
-                if orden.estado == EstadoOrden::Cancelada {
-                    return Err(ErrorOrden::OrdenCancelada);
-                }
-                // Solo puede marcarse como recibida si fue enviada previamente
-                if orden.estado != EstadoOrden::Enviado {
-                    return Err(ErrorOrden::EstadoInvalido);
-                }
-                //cambiar el estado de la orden a "Recibido"
-                orden.estado = EstadoOrden::Recibido;
-                // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
-                self.ordenes.insert(id_orden, &orden);
-                Ok(())
-            } else {
-                Err(ErrorOrden::OrdenNoExiste)
-            }
-        }
-
-        #[ink(message)]
-        pub fn solicitar_cancelacion(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
-            let caller = self.env().caller();
-            // Busca la orden con el ID dado dentro del Mapping ordenes
-            if let Some(mut orden) = self.ordenes.get(id_orden) {
-                //El método get de Mapping te devuelve una copia de la orden
-                // Solo el comprador o el vendedor pueden solicitar la cancelación
-                if caller != orden.comprador && caller != orden.vendedor {
-                    return Err(ErrorOrden::NoAutorizado);
-                }
-                //validar que la orden no este cancelada
-                if orden.estado == EstadoOrden::Cancelada {
-                    return Err(ErrorOrden::OrdenCancelada);
-                }
-                // Determina si quien llama es comprador o vendedor
-                let rol_llamada = if caller == orden.comprador {
-                    Rol::Comprador
-                } else {
-                    Rol::Vendedor
-                };
-
-                match orden.cancelacion_solicitada_por {
-                    //nadie solicito la cancelacion antes => se guarda quien la solicita y se deja pendiente
-                    None => {
-                        orden.pendiente_cancelacion = true;
-                        // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
-                        orden.cancelacion_solicitada_por = Some(rol_llamada);
-                        self.ordenes.insert(id_orden, &orden);
-                        Ok(())
-                    }
-                    //alguien ya la habia solicitado la cancelacion => se confirma la cancelacion
-                    Some(previo) if previo != rol_llamada => {
-                        //ambos acordaron => cancelar directamente
-                        orden.estado = EstadoOrden::Cancelada;
-                        //ya se proceso la cancelacion reseteo las variables
-                        orden.pendiente_cancelacion = false;
-                        orden.cancelacion_solicitada_por = None;
-                        // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
-                        self.ordenes.insert(id_orden, &orden);
-                        Ok(())
-                    }
-                    //el mismo usuario ya habia solicitado la cancelacion => no puede repetir la solicitud
-                    Some(_) => Err(ErrorOrden::CancelacionYaPendiente),
-                }
-            } else {
-                Err(ErrorOrden::OrdenNoExiste)
-            }
-        }
-
-        #[ink(message)]
-        pub fn mostrar_productos_propios(&self, id: AccountId) -> Vec<Producto> {
-            self.productos_por_usuario
-                .get(&id)
-                .map_or(Vec::new(), |ids_producto| {
-                    ids_producto
-                        .iter()
-                        .filter_map(|id_producto| {
-                            self.productos.get(id_producto).map(|p| p.clone())
-                        })
-                        .collect()
-                })
         }
     }
 }
@@ -689,338 +380,632 @@ mod market_place {
 /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
 /// module and test functions are marked with a `#[test]` attribute.
 /// The below code is technically just normal Rust code.
+
 #[cfg(test)]
 mod tests {
-    use ink::{env::test, primitives::AccountId};
+    use crate::market_place::{Categoria, ErrorMarketplace, MarketPlace, Rol};
 
-    use crate::market_place::{
-        Calificacion, Categoria, ErrorMarketplace, ErrorOrden, EstadoOrden, MarketPlace, Orden, Producto, Rol, Usuario
-    };
-
-    /// Imports all the definitions from the outer scope so we can use them here.
     use super::*;
+    use ink::env::test;
+    use ink::primitives::AccountId;
 
-
-    fn account(id: u8) -> AccountId {
-        AccountId::from([id; 32])
+    /// Función helper para crear un AccountId desde un array de bytes
+    fn account_id_from_bytes(bytes: [u8; 32]) -> AccountId {
+        AccountId::from(bytes)
     }
 
-    fn nuevo_contrato() -> MarketPlace {
-        MarketPlace::new()
+    /// Función helper para configurar el entorno de pruebas
+    fn setup_test_env() -> (MarketPlace, AccountId, AccountId) {
+        let mut marketplace = MarketPlace::new();
+        let alice = account_id_from_bytes([1; 32]);
+        let bob = account_id_from_bytes([2; 32]);
+        
+        // Configurar Alice como caller por defecto
+        test::set_caller::<ink::env::DefaultEnvironment>(alice);
+        
+        (marketplace, alice, bob)
     }
 
-    fn contract_dummy() -> MarketPlace {
-        let mut contract = MarketPlace::new();
-        // Registramos algunos usuarios con diferentes roles
-        contract.registrar_usuario("user1".to_string(), Rol::Comprador);
-        contract.registrar_usuario("user2".to_string(), Rol::Vendedor);
-        contract.registrar_usuario("user3".to_string(), Rol::Ambos);
-        contract
+    // ===== TESTS DE REGISTRO DE USUARIOS =====
+
+    #[ink::test]
+    fn test_registrar_usuario_exitoso() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let resultado = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(resultado.is_ok());
     }
-    fn producto_dummy() -> Producto {
-        Producto::new(
-            1,
-            "Producto 1".to_string(),
-            "Descripción del producto 1".to_string(),
-            100,
-            10,
+
+    #[ink::test]
+    fn test_registrar_usuario_ya_registrado() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        // Primer registro exitoso
+        let resultado1 = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(resultado1.is_ok());
+        
+        // Segundo registro debe fallar
+        let resultado2 = marketplace.registrar_usuario("Alice2".to_string(), Rol::Comprador);
+        assert!(resultado2.is_err());
+        if let Err(error) = resultado2 {
+            assert_eq!(error, ErrorMarketplace::UsuarioYaRegistrado);
+        }
+    }
+
+    #[ink::test]
+    fn test_registrar_usuario_diferentes_roles() {
+        let (mut marketplace, alice, bob) = setup_test_env();
+        
+        // Registrar Alice como vendedor
+        let resultado1 = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(resultado1.is_ok());
+        
+        // Cambiar caller a Bob y registrar como comprador
+        test::set_caller::<ink::env::DefaultEnvironment>(bob);
+        let resultado2 = marketplace.registrar_usuario("Bob".to_string(), Rol::Comprador);
+        assert!(resultado2.is_ok());
+        
+        // Registrar Charlie como ambos
+        let charlie = account_id_from_bytes([3; 32]);
+        test::set_caller::<ink::env::DefaultEnvironment>(charlie);
+        let resultado3 = marketplace.registrar_usuario("Charlie".to_string(), Rol::Ambos);
+        assert!(resultado3.is_ok());
+    }
+
+    // ===== TESTS DE AGREGAR PRODUCTO =====
+
+    #[ink::test]
+    fn test_agregar_producto_exitoso() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        // Registrar usuario como vendedor
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
             Categoria::Tecnologia,
-        )
-    }
-
-    #[test]
-    fn crear_calificacion_ok() {
-        let calif = Calificacion::new(account(1), 5, 42);
-        assert_eq!(calif.id, account(1));
-        assert_eq!(calif.puntaje, 5);
-        assert_eq!(calif.id_orden, 42);
-    }
-
-    #[test]
-    fn calificacion_valor_maximo() {
-        let calif = Calificacion::new(account(2), 5, 100);
-        assert_eq!(calif.puntaje, 5);
-    }
-
-    #[test]
-    fn calificacion_valor_minimo() {
-        let calif = Calificacion::new(account(3), 1, 100);
-        assert_eq!(calif.puntaje, 1);
-    }
-
-    #[test]
-    fn test_orden_enviada_ok() {
-        let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
-        let res = orden.marcar_enviada(account(2));
-        assert_eq!(res, Ok(()));
-        assert_eq!(orden.estado, EstadoOrden::Enviado);
-    }
-
-    #[test]
-    fn test_orden_enviada_no_autorizado() {
-        let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
-        let res = orden.marcar_enviada(account(3));
-        assert_eq!(res, Err(ErrorOrden::NoEsVendedor));
-    }
-
-    #[test]
-    fn test_orden_recibida_ok() {
-        let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
-        orden.estado = EstadoOrden::Enviado;
-        let res = orden.marcar_recibida(account(1));
-        assert_eq!(res, Ok(()));
-        assert_eq!(orden.estado, EstadoOrden::Recibido);
-    }
-
-    #[test]
-    fn test_solicitar_cancelacion_ok() {
-        let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
-        let res = orden.solicitar_cancelacion(account(1));
-        assert_eq!(res, Ok(()));
-        assert!(orden.pendiente_cancelacion);
-    }
-
-    #[test]
-    fn test_confirmar_cancelacion_ok() {
-        let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
-        orden.pendiente_cancelacion = true;
-        let res = orden.confirmar_cancelacion(account(2));
-        assert_eq!(res, Ok(()));
-        assert_eq!(orden.estado, EstadoOrden::Cancelada);
-    }
-
-    #[test]
-    fn test_confirmar_cancelacion_sin_solicitar() {
-        let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
-        let res = orden.confirmar_cancelacion(account(2));
-        assert_eq!(res, Err(ErrorOrden::CancelacionNoSolicitada));
-    }
-
-    #[test]
-    fn test_marcar_recibida_estado_invalido() {
-        let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
-        let res = orden.marcar_recibida(account(1));
-        assert_eq!(res, Err(ErrorOrden::EstadoInvalido));
+            10
+        );
+        
+        assert!(resultado.is_ok());
+        if let Ok(producto_id) = resultado {
+            assert_eq!(producto_id, 1); // Primer producto debe tener ID 1
+        }
     }
 
     #[ink::test]
-    fn registrar_usuario_ok() {
-        let mut contrato = MarketPlace::new();
-        ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(1));
-        let res = contrato.registrar_usuario("nico".to_string(), Rol::Comprador);
-        assert_eq!(res, Ok(()));
+    fn test_agregar_producto_usuario_no_existe() {
+        let (mut marketplace, _, _) = setup_test_env();
+        
+        // No registrar usuario
+        let resultado = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        
+        assert!(resultado.is_err());
+        if let Err(error) = resultado {
+            assert_eq!(error, ErrorMarketplace::UsuarioNoExiste);
+        }
     }
 
     #[ink::test]
-    fn registrar_usuario_ya_existente_falla() {
-        let mut contrato = nuevo_contrato();
-        test::set_caller::<ink::env::DefaultEnvironment>(account(1));
-        let _ = contrato.registrar_usuario("nico".to_string(), Rol::Comprador);
-        let res = contrato.registrar_usuario("nico".to_string(), Rol::Vendedor);
-
-        assert_eq!(res, Err("El usuario ya está registrado".to_string()));
+    fn test_agregar_producto_rol_invalido() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        // Registrar usuario como comprador
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Comprador);
+        assert!(reg_result.is_ok());
+        
+        let resultado = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        
+        assert!(resultado.is_err());
+        if let Err(error) = resultado {
+            assert_eq!(error, ErrorMarketplace::RolInvalido);
+        }
     }
 
     #[ink::test]
-    fn modificar_rol_ok() {
-        let mut contrato = nuevo_contrato();
-        test::set_caller::<ink::env::DefaultEnvironment>(account(2));
-        let _ = contrato.registrar_usuario("ana".to_string(), Rol::Comprador);
-
-        let res = contrato.modificar_rol(Rol::Ambos);
-        assert_eq!(res, Ok(()));
+    fn test_agregar_producto_nombre_vacio() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado = marketplace.agregar_producto(
+            "".to_string(),
+            "Descripción".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        
+        assert!(resultado.is_err());
+        if let Err(error) = resultado {
+            assert_eq!(error, ErrorMarketplace::PrecioInvalido);
+        }
     }
 
     #[ink::test]
-    fn modificar_rol_igual_falla() {
-        let mut contrato = nuevo_contrato();
-        test::set_caller::<ink::env::DefaultEnvironment>(account(3));
-        let _ = contrato.registrar_usuario("luis".to_string(), Rol::Vendedor);
-
-        let res = contrato.modificar_rol(Rol::Vendedor);
-        assert_eq!(res, Err(ErrorMarketplace::RolYaAsignado));
+    fn test_agregar_producto_precio_cero() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            0,
+            Categoria::Tecnologia,
+            10
+        );
+        
+        assert!(resultado.is_err());
+        if let Err(error) = resultado {
+            assert_eq!(error, ErrorMarketplace::PrecioInvalido);
+        }
     }
 
-    
-    // #[test]
-    // fn verificar_rol_vendedor_ok() {
-    //     let contract = contract_dummy();
-    //     let res = contract.verificar_rol_vendedor(account(1));
-    //     assert_eq!(res, Ok(()));
-    // }
-    // #[test]
-    // fn verificar_rol_vendedor_falla_si_no_es_vendedor() {
-    //     let contract = contract_dummy();
-    //     let res = contract.verificar_rol_vendedor(account(2));
-    //     assert_eq!(res, Err(market_place::ErrorMarketplace::RolInvalido));
-    // }
-    // #[test]
-    // fn verificar_usuario_existe_ok() {
-    //     let contract = contract_dummy();
-    //     let usuario = Usuario::new("test".to_string(), Rol::Comprador, account(4));
+    #[ink::test]
+    fn test_agregar_producto_cantidad_cero() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            0
+        );
+        
+        assert!(resultado.is_err());
+        if let Err(error) = resultado {
+            assert_eq!(error, ErrorMarketplace::PrecioInvalido);
+        }
+    }
 
-    //     let res = contract.verificar_usuario_existe(account(4));
-    //     assert_eq!(res, Ok(usuario));
-    // }
+    #[ink::test]
+    fn test_agregar_producto_nombre_solo_espacios() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado = marketplace.agregar_producto(
+            "   ".to_string(),
+            "Descripción".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        
+        assert!(resultado.is_err());
+        if let Err(error) = resultado {
+            assert_eq!(error, ErrorMarketplace::PrecioInvalido);
+        }
+    }
 
-    // #[test]
-    // fn verificar_usuario_existe_falla_si_no_existe() {
-    //     let contract = MarketPlace::new();
-    //     let user4 = Usuario::new("test".to_string(), Rol::Comprador, account(4));
-    //     let res = contract.verificar_usuario_existe(account(4));
-    //     assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
-    // }
+    #[ink::test]
+    fn test_agregar_multiples_productos() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado1 = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        assert!(resultado1.is_ok());
+        if let Ok(producto_id) = resultado1 {
+            assert_eq!(producto_id, 1);
+        }
+        
+        let resultado2 = marketplace.agregar_producto(
+            "Mouse".to_string(),
+            "Mouse gaming".to_string(),
+            5000,
+            Categoria::Tecnologia,
+            20
+        );
+        assert!(resultado2.is_ok());
+        if let Ok(producto_id) = resultado2 {
+            assert_eq!(producto_id, 2);
+        }
+    }
 
-    // fn validacion_producto_ok() {
-    //     let contract = MarketPlace::new();
-    //     let nombre = String::from("Producto válido");
-    //     let precio = 100u128;
-    //     let stock = 10u32;
-    //     let res = contract.validacion_producto(&nombre, &precio, &stock);
-    //     assert_eq!(res, Ok(()));
-    // }
-    // #[test]
-    // fn validacion_producto_stock_insuficiente() {
-    //     let contract = MarketPlace::new();
-    //     let nombre = String::from("Producto");
-    //     let precio = 100u128;
-    //     let stock = 0u32;
-    //     let res = contract.validacion_producto(&nombre, &precio, &stock);
-    //     assert_eq!(res, Err(ErrorMarketplace::StockInsuficiente));
-    // }
-    // #[test]
-    // fn validacion_producto_precio_invalido() {
-    //     let contract = MarketPlace::new();
-    //     let nombre = String::from("Producto");
-    //     let precio = 0u128;
-    //     let stock = 5u32;
-    //     let res = contract.validacion_producto(&nombre, &precio, &stock);
-    //     assert_eq!(res, Err(ErrorMarketplace::PrecioInvalido));
-    // }
-    // #[test]
-    // fn validacion_producto_nombre_vacio() {
-    //     let contract = MarketPlace::new();
-    //     let nombre = String::from("");
-    //     let precio = 100u128;
-    //     let stock = 5u32;
-    //     let res = contract.validacion_producto(&nombre, &precio, &stock);
-    //     assert_eq!(res, Err(ErrorMarketplace::NombreInvalido));
-    // }
-    // #[test]
-    // fn validacion_producto_nombre_espacios() {
-    //     let contract = MarketPlace::new();
-    //     let nombre = String::from("   ");
-    //     let precio = 100u128;
-    //     let stock = 5u32;
-    //     let res = contract.validacion_producto(&nombre, &precio, &stock);
-    //     assert_eq!(res, Err(ErrorMarketplace::NombreInvalido));
-    // }
-    // #[test]
-    // fn obtener_publicacion_no_existe() {
-    //     let contract = MarketPlace::new();
-    //     let res = contract.obtener_publicacion(42);
-    //     assert_eq!(res, Err(ErrorMarketplace::PublicacionNoExiste));
-    // }
-    // #[test]
-    // fn obtener_publicacion_ok() {
-    //     let mut contract = contract_dummy();
-    //     let user2: AccountId = account(2);
-    //     ink::env::test::set_caller::<ink::env::DefaultEnvironment>(user2);
-    //     let producto = producto_dummy();
-    //     let publicacion1 = contract.publicar_producto(producto.clone());
+    #[ink::test]
+    fn test_agregar_producto_rol_ambos() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Ambos);
+        assert!(reg_result.is_ok());
+        
+        let resultado = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        
+        assert!(resultado.is_ok());
+        if let Ok(producto_id) = resultado {
+            assert_eq!(producto_id, 1);
+        }
+    }
 
-    //     let res = contract.obtener_publicacion(publicacion1.id);
-    //     assert_eq!(res, Ok(publicacion1));
-    // }
-    // #[test]
-    // fn verificar_owner_publicacion_ok() {
-    //     let mut contract = contract_dummy();
-    //     let vendedor: AccountId = account(2);
-    //     ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
-    //     let producto = producto_dummy();
-    //     // Simula publicar el producto
-    //     contract.publicar_producto(producto.clone());
-    //     // El id_publicacion será 1 porque es el primero
-    //     let res = contract.verificar_owner_publicacion(1, vendedor);
-    //     assert_eq!(res, Ok(()));
-    // }
-    // #[test]
-    // fn verificar_owner_publicacion_publicacion_no_existe() {
-    //     let mut contract = contract_dummy();
-    //     let vendedor: AccountId = account(2);
-    //     ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
-    //     let res = contract.verificar_owner_publicacion(99, vendedor);
-    //     assert_eq!(res, Err(ErrorMarketplace::PublicacionNoExiste));
-    // }
-    // #[test]
-    // fn verificar_owner_publicacion_no_autorizado() {
-    //     let mut contract = contract_dummy();
-    //     let vendedor: AccountId = account(2);
-    //     ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
-    //     // Simula que otro usuario intenta verificar la publicación
-    //     let otro: AccountId = account(20);
-    //     let producto = producto_dummy();
-    //     contract.publicar_producto(producto.clone());
-    //     // El id_publicacion será 1, pero el vendedor es diferente
-    //     let res = contract.verificar_owner_publicacion(1, otro);
-    //     assert_eq!(res, Err(ErrorMarketplace::NoAutorizado));
-    // }
+    // ===== TESTS DE PUBLICAR PRODUCTO =====
 
-    // #[test]
-    // fn publicar_producto_ok() {
-    //     let mut contract = contract_dummy();
-    //     let vendedor = account(2);
-    //     // Simula el caller como vendedor
-    //     ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
-    //     let producto = producto_dummy();
-    //     let res = contract.publicar_producto(producto.clone());
-    //     assert_eq!(res, Ok(()));
-    //     // Verifica que la publicación fue guardada
-    //     let publicacion = contract.obtener_publicacion(1);
-    //     assert_eq!(publicacion.id_vendedor, vendedor);
-    //     assert_eq!(publicacion.producto, producto);
-    // }
-    // #[test]
-    // fn publicar_producto_falla_si_usuario_no_existe() {
-    //     let mut contract = contract_dummy();
-    //     let vendedor = account(2);
-    //     ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
+    #[ink::test]
+    fn test_publicar_producto_exitoso() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        // Registrar usuario y agregar producto
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado_producto = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        assert!(resultado_producto.is_ok());
+        
+        if let Ok(producto_id) = resultado_producto {
+            // Publicar producto
+            let resultado = marketplace.publicar_producto(producto_id, 5);
+            assert!(resultado.is_ok());
+            if let Ok(publicacion_id) = resultado {
+                assert_eq!(publicacion_id, 1); // Primera publicación debe tener ID 1
+            }
+        }
+    }
 
-    //     let producto = producto_dummy();
-    //     let res = contract.publicar_producto(producto);
-    //     assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
-    // }
+    #[ink::test]
+    fn test_publicar_producto_usuario_no_existe() {
+        let (mut marketplace, _, _) = setup_test_env();
+        
+        let resultado = marketplace.publicar_producto(1, 5);
+        assert!(resultado.is_err());
+        if let Err(error) = resultado {
+            assert_eq!(error, ErrorMarketplace::UsuarioNoExiste);
+        }
+    }
 
-    // #[test]
-    // fn publicar_producto_falla_si_no_es_vendedor() {
-    //     let mut contract = contract_dummy();
-    //     let comprador = account(1);
-    //     ink::env::test::set_caller::<ink::env::DefaultEnvironment>(comprador);
-    //     let producto = producto_dummy();
-    //     // Intentar publicar un producto como comprador
-    //     let res = contract.publicar_producto(producto);
-    //     assert_eq!(res, Err(ErrorMarketplace::RolInvalido));
-    // }
-    // #[test]
-    // fn publicar_producto_falla_si_producto_invalido() {
-    //     let mut contract = contract_dummy();
-    //     let vendedor = account(2);
-    //     ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
+    #[ink::test]
+    fn test_publicar_producto_no_existe() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado = marketplace.publicar_producto(999, 5);
+        assert!(resultado.is_err());
+        if let Err(error) = resultado {
+            assert_eq!(error, ErrorMarketplace::ProductoNoExiste);
+        }
+    }
 
-    //     // Intentar publicar un producto con nombre vacío y precio inválido
-    //     // Esto debería fallar por stock primero, luego por precio y nombre
-    //     let producto = Producto::new(
-    //         1,
-    //         "".to_string(), // nombre vacío
-    //         "Desc".to_string(),
-    //         0, // precio inválido
-    //         0, // stock inválido
-    //         Categoria::Tecnologia,
-    //     );
-    //     let res = contract.publicar_producto(producto);
-    //     assert_eq!(res, Err(ErrorMarketplace::StockInsuficiente)); // Falla por stock primero
-    // }
- 
+    #[ink::test]
+    fn test_publicar_producto_stock_insuficiente() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado_producto = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        assert!(resultado_producto.is_ok());
+        
+        if let Ok(producto_id) = resultado_producto {
+            // Intentar publicar más stock del disponible
+            let resultado = marketplace.publicar_producto(producto_id, 15);
+            assert!(resultado.is_err());
+            if let Err(error) = resultado {
+                assert_eq!(error, ErrorMarketplace::StockInsuficiente);
+            }
+        }
+    }
+
+    #[ink::test]
+    fn test_publicar_producto_cantidad_cero() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado_producto = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        assert!(resultado_producto.is_ok());
+        
+        if let Ok(producto_id) = resultado_producto {
+            let resultado = marketplace.publicar_producto(producto_id, 0);
+            assert!(resultado.is_err());
+            if let Err(error) = resultado {
+                assert_eq!(error, ErrorMarketplace::StockInsuficiente);
+            }
+        }
+    }
+
+    #[ink::test]
+    fn test_publicar_producto_multiples_publicaciones() {
+        let (mut marketplace, alice, _) = setup_test_env();
+        
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado_producto = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        assert!(resultado_producto.is_ok());
+        
+        if let Ok(producto_id) = resultado_producto {
+            // Primera publicación
+            let resultado1 = marketplace.publicar_producto(producto_id, 3);
+            assert!(resultado1.is_ok());
+            if let Ok(pub_id) = resultado1 {
+                assert_eq!(pub_id, 1);
+            }
+            
+            // Segunda publicación
+            let resultado2 = marketplace.publicar_producto(producto_id, 4);
+            assert!(resultado2.is_ok());
+            if let Ok(pub_id) = resultado2 {
+                assert_eq!(pub_id, 2);
+            }
+            
+            // Tercera publicación debería fallar (3 + 4 + 5 = 12 > 10)
+            let resultado3 = marketplace.publicar_producto(producto_id, 5);
+            assert!(resultado3.is_err());
+            if let Err(error) = resultado3 {
+                assert_eq!(error, ErrorMarketplace::StockInsuficiente);
+            }
+        }
+    }
+
+    // ===== TESTS DE CREAR ORDEN =====
+
+    #[ink::test]
+    fn test_crear_orden_exitoso() {
+        let (mut marketplace, alice, bob) = setup_test_env();
+        
+        // Registrar vendedor y agregar producto
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado_producto = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        assert!(resultado_producto.is_ok());
+        
+        if let Ok(producto_id) = resultado_producto {
+            // Publicar producto
+            let resultado_pub = marketplace.publicar_producto(producto_id, 5);
+            assert!(resultado_pub.is_ok());
+            
+            if let Ok(publicacion_id) = resultado_pub {
+                // Cambiar a comprador y registrar
+                test::set_caller::<ink::env::DefaultEnvironment>(bob);
+                let reg_comp = marketplace.registrar_usuario("Bob".to_string(), Rol::Comprador);
+                assert!(reg_comp.is_ok());
+                
+                // Configurar pago suficiente
+                test::set_value_transferred::<ink::env::DefaultEnvironment>(200000);
+                
+                // Crear orden
+                let resultado = marketplace.crear_orden(publicacion_id, 2);
+                assert!(resultado.is_ok());
+            }
+        }
+    }
+
+    #[ink::test]
+    fn test_crear_orden_comprador_no_existe() {
+        let (mut marketplace, alice, bob) = setup_test_env();
+        
+        // Registrar vendedor y agregar producto
+        let reg_result = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_result.is_ok());
+        
+        let resultado_producto = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        assert!(resultado_producto.is_ok());
+        
+        if let Ok(producto_id) = resultado_producto {
+            let resultado_pub = marketplace.publicar_producto(producto_id, 5);
+            assert!(resultado_pub.is_ok());
+            
+            if let Ok(publicacion_id) = resultado_pub {
+                // Cambiar a comprador NO registrado
+                test::set_caller::<ink::env::DefaultEnvironment>(bob);
+                test::set_value_transferred::<ink::env::DefaultEnvironment>(200000);
+                
+                let resultado = marketplace.crear_orden(publicacion_id, 2);
+                assert!(resultado.is_err());
+                if let Err(error) = resultado {
+                    assert_eq!(error, ErrorMarketplace::UsuarioNoExiste);
+                }
+            }
+        }
+    }
+
+    #[ink::test]
+    fn test_crear_orden_publicacion_no_existe() {
+        let (mut marketplace, alice, bob) = setup_test_env();
+        
+        // Registrar usuarios
+        let reg_vendedor = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_vendedor.is_ok());
+        
+        test::set_caller::<ink::env::DefaultEnvironment>(bob);
+        let reg_comprador = marketplace.registrar_usuario("Bob".to_string(), Rol::Comprador);
+        assert!(reg_comprador.is_ok());
+        
+        test::set_value_transferred::<ink::env::DefaultEnvironment>(200000);
+        
+        let resultado = marketplace.crear_orden(999, 2);
+        assert!(resultado.is_err());
+        if let Err(error) = resultado {
+            assert_eq!(error, ErrorMarketplace::PublicacionNoExiste);
+        }
+    }
+
+    #[ink::test]
+    fn test_crear_orden_stock_insuficiente() {
+        let (mut marketplace, alice, bob) = setup_test_env();
+        
+        // Setup completo
+        let reg_vendedor = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_vendedor.is_ok());
+        
+        let resultado_producto = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        assert!(resultado_producto.is_ok());
+        
+        if let Ok(producto_id) = resultado_producto {
+            let resultado_pub = marketplace.publicar_producto(producto_id, 3);
+            assert!(resultado_pub.is_ok());
+            
+            if let Ok(publicacion_id) = resultado_pub {
+                test::set_caller::<ink::env::DefaultEnvironment>(bob);
+                let reg_comprador = marketplace.registrar_usuario("Bob".to_string(), Rol::Comprador);
+                assert!(reg_comprador.is_ok());
+                
+                test::set_value_transferred::<ink::env::DefaultEnvironment>(500000);
+                
+                // Intentar comprar más stock del disponible
+                let resultado = marketplace.crear_orden(publicacion_id, 5);
+                assert!(resultado.is_err());
+                if let Err(error) = resultado {
+                    assert_eq!(error, ErrorMarketplace::StockInsuficiente);
+                }
+            }
+        }
+    }
+
+    #[ink::test]
+    fn test_crear_orden_cantidad_cero() {
+        let (mut marketplace, alice, bob) = setup_test_env();
+        
+        // Setup completo
+        let reg_vendedor = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_vendedor.is_ok());
+        
+        let resultado_producto = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        assert!(resultado_producto.is_ok());
+        
+        if let Ok(producto_id) = resultado_producto {
+            let resultado_pub = marketplace.publicar_producto(producto_id, 5);
+            assert!(resultado_pub.is_ok());
+            
+            if let Ok(publicacion_id) = resultado_pub {
+                test::set_caller::<ink::env::DefaultEnvironment>(bob);
+                let reg_comprador = marketplace.registrar_usuario("Bob".to_string(), Rol::Comprador);
+                assert!(reg_comprador.is_ok());
+                
+                test::set_value_transferred::<ink::env::DefaultEnvironment>(200000);
+                
+                let resultado = marketplace.crear_orden(publicacion_id, 0);
+                assert!(resultado.is_err());
+                if let Err(error) = resultado {
+                    assert_eq!(error, ErrorMarketplace::StockInsuficiente);
+                }
+            }
+        }
+    }
+
+    #[ink::test]
+    fn test_crear_orden_saldo_insuficiente() {
+        let (mut marketplace, alice, bob) = setup_test_env();
+        
+        // Setup completo
+        let reg_vendedor = marketplace.registrar_usuario("Alice".to_string(), Rol::Vendedor);
+        assert!(reg_vendedor.is_ok());
+        
+        let resultado_producto = marketplace.agregar_producto(
+            "Laptop".to_string(),
+            "Laptop gaming".to_string(),
+            100000,
+            Categoria::Tecnologia,
+            10
+        );
+        assert!(resultado_producto.is_ok());
+        
+        if let Ok(producto_id) = resultado_producto {
+            let resultado_pub = marketplace.publicar_producto(producto_id, 5);
+            assert!(resultado_pub.is_ok());
+            
+            if let Ok(publicacion_id) = resultado_pub {
+                test::set_caller::<ink::env::DefaultEnvironment>(bob);
+                let reg_comprador = marketplace.registrar_usuario("Bob".to_string(), Rol::Comprador);
+                assert!(reg_comprador.is_ok());
+                
+                test::set_value_transferred::<ink::env::DefaultEnvironment>(150000); // Insuficiente para 2 productos
+                
+                let resultado = marketplace.crear_orden(publicacion_id, 2);
+                assert!(resultado.is_err());
+                if let Err(error) = resultado {
+                    assert_eq!(error, ErrorMarketplace::SaldoInsuficiente);
+                }
+            }
+        }
+    }
 }
 /*
 /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
