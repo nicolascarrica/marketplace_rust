@@ -8,6 +8,11 @@ mod market_place {
     /// Enums
     
     /// Representa los roles posibles que puede tener un usuario dentro del marketplace.
+    /// 
+    /// # Variantes
+    /// - `Comprador`: Solo puede comprar productos
+    /// - `Vendedor`: Solo puede vender productos
+    /// - `Ambos`: Puede tanto comprar como vender
     #[derive(
         Debug,
         Clone,
@@ -24,7 +29,14 @@ mod market_place {
         Ambos,
     }
 
-    /// Categorías posibles para los productos.
+    /// Categorías disponibles para clasificar productos en el marketplace.
+    /// 
+    /// # Variantes
+    /// - `Tecnologia`: Dispositivos electrónicos, software, etc.
+    /// - `Indumentaria`: Ropa, accesorios, calzado
+    /// - `Hogar`: Muebles, decoración, electrodomésticos
+    /// - `Alimentos`: Comida, bebidas, productos alimenticios
+    /// - `Otros`: Cualquier producto que no encaje en las categorías anteriores
     #[derive(
         Debug,
         Clone,
@@ -42,7 +54,13 @@ mod market_place {
         Otros,
     }
 
-    /// Representa los estados posibles de una orden de compra.
+    // Estados posibles que puede tener una orden de compra a lo largo de su ciclo de vida.
+    /// 
+    /// # Variantes
+    /// - `Pendiente`: Orden creada, esperando procesamiento del vendedor
+    /// - `Enviado`: Vendedor ha enviado el producto
+    /// - `Recibido`: Comprador ha recibido y confirmado el producto
+    /// - `Cancelada`: Orden cancelada por alguna de las partes
     #[derive(
         Debug,
         Clone,
@@ -60,8 +78,10 @@ mod market_place {
     }
 
 
-    /// Errores del Marketplace
-    /// Define los posibles errores que pueden ocurrir en el marketplace.
+    /// ## Errores del Marketplace
+    /// 
+    /// Define todos los posibles errores que pueden ocurrir durante las operaciones del marketplace.
+    /// Cada error incluye una descripción específica del problema encontrado.
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, PartialEq)]
@@ -106,6 +126,14 @@ mod market_place {
 
     // Structs
 
+    /// Representa a un usuario registrado en el marketplace.
+    /// 
+    /// # Campos
+    /// - `username`: Nombre de usuario único
+    /// - `rol`: Rol del usuario (Comprador, Vendedor, Ambos)
+    /// - `id`: Identificador único de la cuenta (AccountId)
+    /// - `verificacion`: Estado de verificación del usuario
+    /// 
     #[derive(
         Debug,
         Clone,
@@ -121,6 +149,16 @@ mod market_place {
         id: AccountId,
         verificacion: bool,
     }
+
+    /// Crea un nuevo usuario con verificación automática.
+    /// 
+    /// # Parámetros
+    /// - `username`: Nombre del usuario
+    /// - `rol`: Rol asignado al usuario
+    /// - `id`: AccountId del usuario
+    /// 
+    /// # Retorna
+    /// Una nueva instancia de `Usuario`
     impl Usuario {
         pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
             Self {
@@ -132,6 +170,14 @@ mod market_place {
         }
     }
 
+    /// Representa un producto en el marketplace.
+    /// 
+    /// # Campos
+    /// - `id`: Identificador único del producto
+    /// - `nombre`: Nombre del producto
+    /// - `descripcion`: Descripción detallada del producto
+    /// - `precio`: Precio del producto en la moneda nativa
+    /// - `categoria`: Categoría a la que pertenece el producto
 
     #[derive(
         Debug,
@@ -149,6 +195,18 @@ mod market_place {
         precio: u128,
         categoria: Categoria,
     }
+
+        /// Crea un nuevo producto.
+        /// 
+        /// # Parámetros
+        /// - `id`: Identificador único
+        /// - `nombre`: Nombre del producto
+        /// - `descripcion`: Descripción del producto
+        /// - `precio`: Precio del producto
+        /// - `categoria`: Categoría del producto
+        /// 
+        /// # Retorna
+        /// Una nueva instancia de `Producto`
     impl Producto {
         pub fn new(
             id: u32,
@@ -166,6 +224,14 @@ mod market_place {
             }
         }
     }
+
+    /// Representa una publicación de producto en el marketplace.
+    /// 
+    /// # Campos
+    /// - `id`: Identificador único de la publicación
+    /// - `producto_id`: ID del producto publicado
+    /// - `vendedor`: AccountId del vendedor
+    /// - `stock_publicacion`: Cantidad disponible en esta publicación
     #[derive(
         Debug,
         Clone,
@@ -183,6 +249,17 @@ mod market_place {
         stock_publicacion: u32,
     }
 
+    /// Crea una nueva publicación.
+    /// 
+    /// # Parámetros
+    /// - `id`: Identificador único
+    /// - `vendedor`: AccountId del vendedor
+    /// - `producto_id`: ID del producto a publicar
+    /// - `stock_publicacion`: Cantidad disponible
+    /// 
+    /// # Retorna
+    /// Una nueva instancia de `Publicacion`
+
     impl Publicacion {
         pub fn new(id: u32, vendedor: AccountId, producto_id: u32, stock_publicacion: u32) -> Self {
             Self {
@@ -194,6 +271,17 @@ mod market_place {
         }
     }
 
+    /// Representa una orden de compra en el marketplace.
+    /// 
+    /// # Campos
+    /// - `id`: Identificador único de la orden
+    /// - `comprador`: AccountId del comprador
+    /// - `vendedor`: AccountId del vendedor
+    /// - `producto_id`: ID del producto ordenado
+    /// - `cantidad`: Cantidad ordenada
+    /// - `total`: Monto total de la orden
+    /// - `estado`: Estado actual de la orden
+    /// 
     #[derive(
         Debug,
         PartialEq,
@@ -212,6 +300,18 @@ mod market_place {
         estado: EstadoOrden,
     }
 
+    /// Crea una nueva orden con estado pendiente.
+    /// 
+    /// # Parámetros
+    /// - `id`: Identificador único
+    /// - `comprador`: AccountId del comprador
+    /// - `vendedor`: AccountId del vendedor
+    /// - `producto_id`: ID del producto
+    /// - `cantidad`: Cantidad ordenada
+    /// - `total`: Monto total
+    /// 
+    /// # Retorna
+    /// Una nueva instancia de `Orden`
     impl Orden {
         pub fn new(id: u32, comprador: AccountId, vendedor: AccountId, producto_id: u32, cantidad: u32, total: u128) -> Self {
             Self {
@@ -226,9 +326,18 @@ mod market_place {
         }
     }
 
-    /// Defines the storage of your contract.
-    /// Add new fields to the below struct in order
-    /// to add new static storage fields to your contract.
+    /// ## Contrato principal
+    /// 
+    /// Define el almacenamiento y las funcionalidades principales del marketplace.
+    /// 
+    /// # Campos de almacenamiento
+    /// - `usuarios`: Mapeo de AccountId a Usuario
+    /// - `productos`: Mapeo de ID a Producto
+    /// - `stock`: Mapeo de (producto_id, vendedor) a cantidad en depósito
+    /// - `publicaciones`: Mapeo de ID a Publicación
+    /// - `ordenes`: Mapeo de ID a Orden
+    /// - Contadores para generar IDs únicos
+
     #[ink(storage)]
     pub struct MarketPlace {
         usuarios: Mapping<AccountId, Usuario>,
@@ -243,8 +352,9 @@ mod market_place {
 
     impl MarketPlace {
         /// Crea una nueva instancia del contrato MarketPlace.
+        /// 
         /// # Retorna
-        /// Un contrato con mapas vacíos y contadores en cero.
+        /// Un contrato con todos los mapeos vacíos y contadores inicializados en cero.
         #[ink(constructor)]
         pub fn new() -> Self {
             Self {
@@ -259,6 +369,19 @@ mod market_place {
             }
         }
 
+        /// Registra un nuevo usuario en el marketplace.
+        /// 
+        /// # Parámetros
+        /// - `username`: Nombre de usuario único
+        /// - `rol`: Rol del usuario (Comprador, Vendedor, Ambos)
+        /// 
+        /// # Retorna
+        /// - `Ok(())`: Si el registro fue exitoso
+        /// - `Err(ErrorMarketplace::UsuarioYaRegistrado)`: Si el usuario ya existe
+        /// 
+        /// # Eventos
+        /// Emite `UsuarioRegistrado` al completarse exitosamente.
+
         #[ink(message)]
         pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
@@ -268,6 +391,37 @@ mod market_place {
             self.usuarios.insert(caller, &Usuario::new(username, rol, caller));
             Ok(())
         }
+
+        /// Verifica si una cuenta está registrada en el marketplace.
+        /// 
+        /// # Parámetros
+        /// - `cuenta`: AccountId a verificar
+        /// 
+        /// # Retorna
+        /// - `true`: Si la cuenta está registrada
+        /// - `false`: Si la cuenta no está registrada
+        #[ink(message)]
+        pub fn esta_registrado(&self, cuenta: AccountId) -> bool {
+            self.usuarios.contains(&cuenta)
+        }
+
+        /// Agrega un nuevo producto al marketplace y lo almacena en el depósito del vendedor.
+        /// 
+        /// # Parámetros
+        /// - `nombre`: Nombre del producto
+        /// - `descripcion`: Descripción detallada
+        /// - `precio`: Precio del producto (debe ser > 0)
+        /// - `categoria`: Categoría del producto
+        /// - `cantidad`: Cantidad inicial en depósito (debe ser > 0)
+        /// 
+        /// # Retorna
+        /// - `Ok(u32)`: ID del producto creado
+        /// - `Err(ErrorMarketplace)`: Si ocurre algún error
+        /// 
+        /// # Errores
+        /// - `UsuarioNoExiste`: Si el caller no está registrado
+        /// - `RolInvalido`: Si el usuario es solo comprador
+        /// - `PrecioInvalido`: Si el precio, nombre o cantidad son inválidos
 
         #[ink(message)]
         pub fn agregar_producto(
@@ -298,6 +452,20 @@ mod market_place {
             Ok(producto.id)
         }
 
+        /// Publica un producto desde el depósito del vendedor al marketplace.
+        /// 
+        /// # Parámetros
+        /// - `producto_id`: ID del producto a publicar
+        /// - `cantidad`: Cantidad a publicar (debe ser ≤ stock en depósito)
+        /// 
+        /// # Retorna
+        /// - `Ok(u32)`: ID de la publicación creada
+        /// - `Err(ErrorMarketplace)`: Si ocurre algún error
+        /// 
+        /// # Errores
+        /// - `UsuarioNoExiste`: Si el caller no está registrado
+        /// - `ProductoNoExiste`: Si el producto no existe
+        /// - `StockInsuficiente`: Si no hay suficiente stock en depósito
 
         #[ink(message)]
         pub fn publicar_producto(&mut self, producto_id: u32, cantidad: u32) -> Result<u32, ErrorMarketplace> {
@@ -337,6 +505,24 @@ mod market_place {
         
             Ok(publicacion.id)
         }
+
+        /// Crea una orden de compra para un producto publicado.
+        /// 
+        /// # Parámetros
+        /// - `publicacion_id`: ID de la publicación a comprar
+        /// - `cantidad`: Cantidad a comprar
+        /// 
+        /// # Retorna
+        /// - `Ok(())`: Si la orden fue creada exitosamente
+        /// - `Err(ErrorMarketplace)`: Si ocurre algún error
+        /// 
+        /// # Errores
+        /// - `UsuarioNoExiste`: Si comprador o vendedor no existen
+        /// - `PublicacionNoExiste`: Si la publicación no existe
+        /// - `StockInsuficiente`: Si no hay suficiente stock
+        /// - `SaldoInsuficiente`: Si el pago enviado es insuficiente
+        /// - `TransferenciaFallida`: Si falla la transferencia al vendedor
+        /// 
 
         #[ink(message, payable)]
         pub fn crear_orden(&mut self, publicacion_id: u32, cantidad: u32) -> Result<(), ErrorMarketplace> {
