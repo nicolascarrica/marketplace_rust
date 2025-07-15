@@ -2,11 +2,13 @@
 
 #[ink::contract]
 mod market_place {
+    use core::char::CharTryFromError;
     use std::vec;
 
     use ink::prelude::string::String;
     use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
+    use ink_e2e::sr25519::PublicKey;
     //use ink_e2e::subxt_signer::bip39::serde::de::value::Error;
 
     /// Enums
@@ -106,6 +108,7 @@ mod market_place {
         DescripcionInvalida,
         IDProductoEnUso,
         IDPublicacionEnUso,
+        MontoInsuficiente,
     }
     #[cfg(feature = "std")]
     impl core::fmt::Display for ErrorMarketplace {
@@ -137,6 +140,7 @@ mod market_place {
                 ErrorMarketplace::DescripcionInvalida => "La descripción no puede estar vacía",
                 ErrorMarketplace::IDProductoEnUso => "El ID del producto ya está en uso",
                 ErrorMarketplace::IDPublicacionEnUso => "El ID de la publicación ya está en uso",
+                ErrorMarketplace::MontoInsuficiente => "El monto dado es insuficiente para cubrir el total de la orden",
             };
             write!(f, "{mensaje}")
         }
@@ -186,26 +190,23 @@ mod market_place {
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Producto {
-        id_producto: u32,
-        id_vendedor: AccountId,
-        nombre: String,
-        descripcion: String,
-        stock: u32,
-    }
+            id_producto: u32,
+            nombre: String,
+            descripcion: String,
+            categoria: Categoria,
+        }
     impl Producto {
         pub fn new(
             id_producto: u32,
-            id_vendedor: AccountId,
             nombre: String,
             descripcion: String,
-            stock: u32,
+            categoria: Categoria,
         ) -> Self {
             Self {
                 id_producto,
-                id_vendedor,
                 nombre,
                 descripcion,
-                stock,
+                categoria,
             }
         }
     }
@@ -222,10 +223,8 @@ mod market_place {
     pub struct Publicacion {
         id_publicacion: u32,
         id_vendedor: AccountId,
-        id_producto: u32,
+        id_producto:u32,
         precio: u128,
-        categoria: Categoria,
-        descripcion: String,
         stock_a_vender: u32,
     }
 
@@ -235,8 +234,6 @@ mod market_place {
             id_vendedor: AccountId,
             id_producto: u32,
             precio: u128,
-            categoria: Categoria,
-            descripcion: String,
             stock_a_vender: u32,
         ) -> Self {
             Self {
@@ -244,10 +241,28 @@ mod market_place {
                 id_vendedor,
                 id_producto,
                 precio,
-                categoria,
-                descripcion,
                 stock_a_vender,
             }
+        }
+
+        fn verificar_stock(
+            &self,
+            stock_pedido: u32,
+        ) -> Result<(), ErrorMarketplace> {
+            if stock_pedido > self.stock_a_vender {
+                return Err(ErrorMarketplace::StockInsuficiente);
+            }
+            Ok(())
+        }
+
+        fn verificar_precio(
+            &self,
+            precio: u128,
+        ) -> Result<(), ErrorMarketplace> {
+            if precio <= 0  {
+                return Err(ErrorMarketplace::PrecioInvalido);
+            }
+            Ok(())
         }
     }
 
@@ -261,12 +276,29 @@ mod market_place {
     )]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Orden {
-        pub id: u32,
-        pub comprador: AccountId,
-        pub vendedor: AccountId,
-        pub productos: Vec<(u32, Producto)>,
-        pub estado: EstadoOrden,
-        pub total: u128,
+         id: u32,
+         comprador: AccountId,
+         vendedor: AccountId,
+         id_producto: u32, //id del producto que se ordena
+         cant_producto: u16, //cantidad de producto que se ordena
+         estado: EstadoOrden,
+         total: u128,
+    }
+
+    use scale_info::TypeInfo;
+    #[derive(
+        Debug,
+        PartialEq,
+        Eq,
+        ink::scale::Encode,
+        ink::scale::Decode,
+        scale_info::TypeInfo, 
+        ink::storage::traits::StorageLayout,
+    )]
+    pub struct Deposito {
+        id_producto: u32,
+        id_vendedor: AccountId,
+        stock: u32,
     }
 
     /// Defines the storage of your contract.
@@ -274,11 +306,12 @@ mod market_place {
     /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct MarketPlace {
-        usuarios: Mapping<AccountId, Usuario>,
+        usuarios: Mapping<AccountId, Usuario>, //id_usuario -> Usuario, todos los usuarios
         publicaciones: Mapping<u32, Publicacion>, //id_publicacion -> Publicacion, todas las publicaciones
         publicaciones_por_vendedor: Mapping<AccountId, Vec<u32>>, //vendedor -> [id_publicacion] busqueda rapida
         productos: Mapping<u32, Producto>,                        //id_producto -> Producto
-        ordenes: Mapping<u32, Orden>,
+        ordenes: Mapping<u32, Orden>, //id_orden -> Orden
+        stock_general: Mapping<(AccountId, u32), Deposito>, // (id_vendedor, id_producto) -> Deposito
         //Atributos auxiliares
         contador_ordenes: u32,
         contador_publicacion: u32,
@@ -291,14 +324,16 @@ mod market_place {
             id: u32,
             comprador: AccountId,
             vendedor: AccountId,
-            productos: Vec<(u32, Producto)>,
+            id_producto: u32,
+            cant_producto: u16,
             total: u128,
         ) -> Self {
             Self {
                 id,
                 comprador,
                 vendedor,
-                productos,
+                id_producto,
+                cant_producto,
                 total,
                 estado: EstadoOrden::Pendiente,
             }
@@ -317,6 +352,7 @@ mod market_place {
                 ordenes: Mapping::default(),
                 publicaciones: Mapping::default(),
                 publicaciones_por_vendedor: Mapping::default(),
+                stock_general: Mapping::default(),
                 contador_ordenes: 0,
                 contador_publicacion: 0,
                 contador_productos: 0,
@@ -385,6 +421,17 @@ mod market_place {
             }
         }
 
+        //Helper verificar que el usuario tenga el rol correcto
+        fn verificar_rol_comprador(&self, id: AccountId) -> Result<(), ErrorMarketplace> {
+            let usuario = self.verificar_usuario_existe(id)?;
+            if usuario.rol == Rol::Ambos || usuario.rol == Rol::Comprador {
+                Ok(())
+            } else {
+                Err(ErrorMarketplace::RolInvalido)
+            }
+        }        
+
+
         //Helper validar nombre de producto
         fn validar_nombre_producto(&self, nombre: &String) -> Result<(), ErrorMarketplace> {
             if nombre.is_empty() || nombre.trim().is_empty() {
@@ -400,21 +447,6 @@ mod market_place {
             Ok(())
         }
 
-        //helper validar precio de producto
-        fn validar_precio_producto(&self, precio: &u128) -> Result<(), ErrorMarketplace> {
-            if *precio <= 0 {
-                return Err(ErrorMarketplace::PrecioInvalido);
-            }
-            Ok(())
-        }
-
-        //Helper validar stock de producto
-        fn validar_stock_producto(&self, stock_total: &u32) -> Result<(), ErrorMarketplace> {
-            if *stock_total <= 0 {
-                return Err(ErrorMarketplace::StockInsuficiente);
-            }
-            Ok(())
-        }
         //Helper Verifica que el stock total del producto sea suficiente para la cantidad a vender.
         fn validar_stock_publicacion(
             &self,
@@ -577,6 +609,24 @@ mod market_place {
                 None => Err(ErrorMarketplace::NoHayPublicaciones),
             }
         }
+        #[ink(message)]
+        pub fn inicializar_deposito(&mut self, id_vendedor: AccountId,id_producto: u32, stock: u32){
+            // Verificar que el usuario sea vendedor
+            self.verificar_rol_vendedor(id_vendedor).expect("El usuario no es vendedor");
+
+            // Verificar que el stock sea válido
+            self.validar_stock_producto(&stock).expect("Stock inválido");
+
+            // Crear un nuevo depósito
+            let deposito = Deposito {
+                id_producto,
+                id_vendedor,
+                stock,
+            };
+
+            // Insertar el depósito en el mapping
+            self.stock_general.insert((id_vendedor, id_producto), &deposito);
+        }
 
         #[ink(message)]
         pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<(), String> {
@@ -676,19 +726,28 @@ mod market_place {
             &mut self,
             id_publicacion: u32,
             cant_producto: u16,
-        ) -> Result<(), ErrorMarketplace> {
+            monto_dado: u128,
+        ) -> Result<(), ErrorMarketplace> { //monto dado es el monto que el comprador me da para pagar la orden
             let caller = self.env().caller();
 
             // Verificar que el usuario exista
-            let usuario = self.verificar_usuario_existe(caller)?;
+            self.verificar_usuario_existe(caller)?;
 
-            // Solo compradores o ambos pueden comprar
-            if usuario.rol == Rol::Vendedor {
-                return Err(ErrorMarketplace::RolInvalido);
-            }
+            // Verificar que el usuario sea comprador
+            self.verificar_rol_comprador(caller)?;
 
             // Verificar que la publicación exista
             let publicacion = self.obtener_publicacion(id_publicacion)?;
+
+            // Verificar que el stock sea suficiente y asi poder crear la orden
+            publicacion.verificar_stock(cant_producto as u32)?;
+
+            let tot_orden = publicacion.precio * cant_producto as u128;
+
+            // Verificar que el monto dado sea suficiente para cubrir el total de la orden
+            if monto_dado < tot_orden {
+                return Err(ErrorMarketplace::MontoInsuficiente);
+            }
 
             // Crear nueva orden
             let nueva_id = self.contador_ordenes;
@@ -696,8 +755,9 @@ mod market_place {
                 nueva_id,
                 caller,
                 publicacion.id_vendedor,
-                vec![(cant_producto, publicacion.producto.clone())],
-                publicacion.producto.precio,
+                publicacion.id_producto,
+                cant_producto,
+                tot_orden,
             );
 
             self.ordenes.insert(nueva_id, &orden);
