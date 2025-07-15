@@ -745,7 +745,7 @@ mod market_place {
             let tot_orden = publicacion.precio * cant_producto as u128;
 
             // Verificar que el monto dado sea suficiente para cubrir el total de la orden
-            if monto_dado < tot_orden {
+            if monto_dado <=0 || monto_dado < tot_orden {
                 return Err(ErrorMarketplace::MontoInsuficiente);
             }
 
