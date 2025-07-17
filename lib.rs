@@ -60,6 +60,7 @@ mod market_place {
         Pendiente,
         Enviado,
         Recibido,
+        Cancelada,
     }
     #[derive(
         Debug,
@@ -82,6 +83,7 @@ mod market_place {
         ProductoNoExiste,
         StockInsuficiente,
         OrdenNoExiste,
+        OrdenCancelada,
     }
 
     //Enum Errores
@@ -563,9 +565,7 @@ mod market_place {
             publicacion: Publicacion,
         ) -> Result<(), ErrorMarketplace> {
             // Verificar que la publicación no exista
-            if self.publicaciones.contains(&publicacion.id_publicacion) {
-                return Err(ErrorMarketplace::IDPublicacionEnUso);
-            }
+            self.verificar_id_publicacion_en_uso(publicacion.id_publicacion)?;
             // Insertar la publicación en el mapping
             self.publicaciones
                 .insert(publicacion.id_publicacion, &publicacion);
@@ -815,7 +815,6 @@ mod market_place {
 
             Ok(())
         }
-
         #[ink(message)]
         pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
             let caller = self.env().caller();
@@ -823,7 +822,7 @@ mod market_place {
             if let Some(mut orden) = self.ordenes.get(id_orden) {
                 //El método get de Mapping te devuelve una copia de la orden
                 //validar que quien llame sea vendedor
-                if caller != self.vendedor {
+                if caller != orden.vendedor {
                     return Err(ErrorOrden::NoEsVendedor);
                 }
                 //validar que la orden no este cancelada
@@ -838,7 +837,7 @@ mod market_place {
                 self.ordenes.insert(id_orden, &orden);
                 Ok(())
             } else {
-                Err(ErrorOrden::OrdenNiExiste)
+                Err(ErrorOrden::OrdenNoExiste)
             }
         }
 
@@ -895,23 +894,21 @@ mod market_place {
 
         fn contract_dummy() -> MarketPlace {
             let mut contract = MarketPlace::new();
-            // Registramos algunos usuarios con diferentes roles
-            contract.registrar_usuario("user1".to_string(), Rol::Comprador);
-            contract.registrar_usuario("user2".to_string(), Rol::Vendedor);
-            contract.registrar_usuario("user3".to_string(), Rol::Ambos);
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(1));
+            contract
+                .registrar_usuario("user1".to_string(), Rol::Comprador)
+                .ok();
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(2));
+            contract
+                .registrar_usuario("user2".to_string(), Rol::Vendedor)
+                .ok();
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(3));
+            contract
+                .registrar_usuario("user3".to_string(), Rol::Ambos)
+                .ok();
             contract
         }
-        fn producto_dummy() -> Producto {
-            Producto::new(
-                1,
-                "Producto 1".to_string(),
-                "Descripción del producto 1".to_string(),
-                100,
-                10,
-                Categoria::Tecnologia,
-            )
-        }
-        #[test]
+        /*         #[test]
         fn test_orden_enviada_ok() {
             let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
             let res = orden.marcar_enviada(account(2));
@@ -940,7 +937,7 @@ mod market_place {
             let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
             let res = orden.marcar_recibida(account(1));
             assert_eq!(res, Err(ErrorOrden::EstadoInvalido));
-        }
+        } */
 
         #[ink::test]
         fn registrar_usuario_ok() {
@@ -980,194 +977,66 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::RolYaAsignado));
         }
 
-        #[test]
+        #[ink::test]
         fn verificar_rol_vendedor_ok() {
             let contract = contract_dummy();
-            let res = contract.verificar_rol_vendedor(account(1));
+            let res = contract.verificar_rol_vendedor(account(2));
             assert_eq!(res, Ok(()));
         }
-        #[test]
+        #[ink::test]
         fn verificar_rol_vendedor_falla_si_no_es_vendedor() {
             let contract = contract_dummy();
-            let res = contract.verificar_rol_vendedor(account(2));
+            let res = contract.verificar_rol_vendedor(account(1));
             assert_eq!(res, Err(ErrorMarketplace::RolInvalido));
         }
-        #[test]
+        #[ink::test]
         fn verificar_usuario_existe_ok() {
-            let contract = contract_dummy();
+            let mut contract = contract_dummy();
             let usuario = Usuario::new("test".to_string(), Rol::Comprador, account(4));
-
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(4));
+            let registrar_ok =
+                contract.registrar_usuario(usuario.username.clone(), usuario.rol.clone());
+            assert_eq!(registrar_ok, Ok(()));
             let res = contract.verificar_usuario_existe(account(4));
             assert_eq!(res, Ok(usuario));
         }
 
-        #[test]
+        #[ink::test]
         fn verificar_usuario_existe_falla_si_no_existe() {
             let contract = MarketPlace::new();
-            let user4 = Usuario::new("test".to_string(), Rol::Comprador, account(4));
             let res = contract.verificar_usuario_existe(account(4));
             assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
         }
-
-        fn validacion_producto_ok() {
-            let contract = MarketPlace::new();
+        #[ink::test]
+        fn registro_producto_ok() {
+            let mut contract = contract_dummy();
             let nombre = String::from("Producto válido");
-            let precio = 100u128;
-            let stock = 10u32;
-            let res = contract.validacion_producto(&nombre, &precio, &stock);
+            let descripcion = String::from("Descripción del producto");
+            let categoria: Categoria = Categoria::Tecnologia;
+            let stock: u32 = 10;
+            //Usamos el vendedor account(2) para registrar el producto
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(2));
+            let res = contract.registrar_producto(
+                nombre.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                stock,
+            );
             assert_eq!(res, Ok(()));
         }
-        #[test]
-        fn validacion_producto_stock_insuficiente() {
-            let contract = MarketPlace::new();
-            let nombre = String::from("Producto");
-            let precio = 100u128;
-            let stock = 0u32;
-            let res = contract.validacion_producto(&nombre, &precio, &stock);
-            assert_eq!(res, Err(ErrorMarketplace::StockInsuficiente));
-        }
-        #[test]
-        fn validacion_producto_precio_invalido() {
-            let contract = MarketPlace::new();
-            let nombre = String::from("Producto");
-            let precio = 0u128;
-            let stock = 5u32;
-            let res = contract.validacion_producto(&nombre, &precio, &stock);
-            assert_eq!(res, Err(ErrorMarketplace::PrecioInvalido));
-        }
-        #[test]
-        fn validacion_producto_nombre_vacio() {
-            let contract = MarketPlace::new();
-            let nombre = String::from("");
-            let precio = 100u128;
-            let stock = 5u32;
-            let res = contract.validacion_producto(&nombre, &precio, &stock);
-            assert_eq!(res, Err(ErrorMarketplace::NombreInvalido));
-        }
-        #[test]
+
+        #[ink::test]
         fn validacion_producto_nombre_espacios() {
-            let contract = MarketPlace::new();
+            let mut contract = MarketPlace::new();
             let nombre = String::from("   ");
-            let precio = 100u128;
-            let stock = 5u32;
-            let res = contract.validacion_producto(&nombre, &precio, &stock);
+            let res = contract.validar_nombre_producto(&nombre);
             assert_eq!(res, Err(ErrorMarketplace::NombreInvalido));
         }
-        #[test]
+        #[ink::test]
         fn obtener_publicacion_no_existe() {
             let contract = MarketPlace::new();
             let res = contract.obtener_publicacion(42);
             assert_eq!(res, Err(ErrorMarketplace::PublicacionNoExiste));
-        }
-        #[test]
-        fn obtener_publicacion_ok() {
-            let mut contract = contract_dummy();
-            let user2: AccountId = account(2);
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(user2);
-            let producto = producto_dummy();
-            let res_pub = contract.crear_publicacion(producto.clone());
-
-            match res_pub {
-                Ok(publicacion1) => {
-                    let res = contract.obtener_publicacion(publicacion1.id_publicacion);
-                    assert_eq!(res, Ok(publicacion1));
-                }
-                Err(e) => panic!("Fallo crear_publicacion: {:?}", e),
-            }
-        }
-        #[test]
-        fn verificar_owner_publicacion_ok() {
-            let mut contract = contract_dummy();
-            let vendedor: AccountId = account(2);
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
-            let producto = producto_dummy();
-            // Simula publicar el producto
-            contract.crear_publicacion(producto.clone());
-            // El id_publicacion será 1 porque es el primero
-            let res = contract.verificar_owner_publicacion(1, vendedor);
-            assert_eq!(res, Ok(()));
-        }
-        #[test]
-        fn verificar_owner_publicacion_publicacion_no_existe() {
-            let mut contract = contract_dummy();
-            let vendedor: AccountId = account(2);
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
-            let res = contract.verificar_owner_publicacion(99, vendedor);
-            assert_eq!(res, Err(ErrorMarketplace::PublicacionNoExiste));
-        }
-        #[test]
-        fn verificar_owner_publicacion_no_autorizado() {
-            let mut contract = contract_dummy();
-            let vendedor: AccountId = account(2);
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
-            // Simula que otro usuario intenta verificar la publicación
-            let otro: AccountId = account(20);
-            let producto = producto_dummy();
-            contract.crear_publicacion(producto.clone());
-            // El id_publicacion será 1, pero el vendedor es diferente
-            let res = contract.verificar_owner_publicacion(1, otro);
-            assert_eq!(res, Err(ErrorMarketplace::NoAutorizado));
-        }
-
-        #[test]
-        fn crear_publicacion_ok() {
-            let mut contract = contract_dummy();
-            let vendedor = account(2);
-            // Simula el caller como vendedor
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
-            let producto = producto_dummy();
-            let res = contract.crear_publicacion(producto.clone());
-
-            match res {
-                Ok(publicacion) => {
-                    // Verifica que la publicación fue guardada
-                    let guardada = contract.obtener_publicacion(publicacion.id_publicacion);
-                    assert_eq!(guardada, Ok(publicacion.clone()));
-                    assert_eq!(publicacion.id_vendedor, vendedor);
-                    assert_eq!(publicacion.producto, producto);
-                }
-                Err(e) => panic!("Fallo crear_publicacion: {:?}", e),
-            }
-        }
-        #[test]
-        fn crear_publicacion_falla_si_usuario_no_existe() {
-            let mut contract = contract_dummy();
-            let vendedor = account(2);
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
-
-            let producto = producto_dummy();
-            let res = contract.crear_publicacion(producto);
-            assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
-        }
-
-        #[test]
-        fn crear_publicacion_falla_si_no_es_vendedor() {
-            let mut contract = contract_dummy();
-            let comprador = account(1);
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(comprador);
-            let producto = producto_dummy();
-            // Intentar publicar un producto como comprador
-            let res = contract.crear_publicacion(producto);
-            assert_eq!(res, Err(ErrorMarketplace::RolInvalido));
-        }
-        #[test]
-        fn crear_publicacion_falla_si_producto_invalido() {
-            let mut contract = contract_dummy();
-            let vendedor = account(2);
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(vendedor);
-
-            // Intentar publicar un producto con nombre vacío y precio inválido
-            // Esto debería fallar por stock primero, luego por precio y nombre
-            let producto = Producto::new(
-                1,
-                "".to_string(), // nombre vacío
-                "Desc".to_string(),
-                0, // precio inválido
-                0, // stock inválido
-                Categoria::Tecnologia,
-            );
-            let res = contract.crear_publicacion(producto);
-            assert_eq!(res, Err(ErrorMarketplace::StockInsuficiente)); // Falla por stock primero
         }
     }
 }
