@@ -909,7 +909,7 @@ mod market_place {
                 .ok();
             contract
         }
-        /*         #[test]
+        #[test]
         fn test_orden_enviada_ok() {
             let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
             let res = orden.marcar_enviada(account(2));
@@ -938,7 +938,7 @@ mod market_place {
             let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
             let res = orden.marcar_recibida(account(1));
             assert_eq!(res, Err(ErrorOrden::EstadoInvalido));
-        } */
+        }
 
         /// Test MarketPlace
         #[ink::test]
