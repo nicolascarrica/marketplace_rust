@@ -61,29 +61,6 @@ mod market_place {
         Recibido,
         Cancelada,
     }
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub enum ErrorOrden {
-        NoEsVendedor,
-        NoEsComprador,
-        EstadoInvalido,
-        NoAutorizado,
-        UsuarioYaRegistrado,
-        UsuarioNoExiste,
-        RolInvalido,
-        ProductoNoExiste,
-        StockInsuficiente,
-        OrdenNoExiste,
-        OrdenCancelada,
-    }
 
     //Enum Errores
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -317,9 +294,8 @@ mod market_place {
             }
         }
 
-        pub fn actualizar_stock(&mut self, stock: u32) -> Result<(), ErrorMarketplace> {
+        pub fn actualizar_stock(&mut self, stock: u32) {
             self.stock = stock;
-            Ok(())
         }
     }
 
@@ -679,7 +655,8 @@ mod market_place {
                 .stock_general
                 .get(&(id_vendedor, id_producto))
                 .ok_or(ErrorMarketplace::ProductoNoExiste)?;
-            deposito.actualizar_stock(nuevo_stock)?;
+            
+            deposito.actualizar_stock(nuevo_stock); 
 
             //se debe volver a insertar para poder actualizar el stock
             self.stock_general
@@ -715,7 +692,7 @@ mod market_place {
                 .get(&(id_vendedor, id_producto))
                 .ok_or(ErrorMarketplace::ProductoNoExiste)?;
             // Actualizar el stock del depósito
-            deposito.actualizar_stock(stock)?;
+            deposito.actualizar_stock(stock);
             // Guardar el depósito actualizado en el mapping
             self.stock_general
                 .insert((id_vendedor, id_producto), &deposito);
@@ -1034,10 +1011,10 @@ mod market_place {
     /// The below code is technically just normal Rust code.
     #[cfg(test)]
     mod tests {
-        use ink::{env::test, primitives::AccountId, xcm::VersionedNetworkId};
+        use ink::{primitives::AccountId};
 
         use crate::market_place::{
-            Categoria, ErrorMarketplace, ErrorOrden, EstadoOrden, MarketPlace, Orden, Producto,
+            Categoria, ErrorMarketplace, EstadoOrden, MarketPlace, Orden, Producto,
             Rol, Usuario,
         };
 
@@ -1486,6 +1463,21 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::StockDepositoInsuficiente));
         }
 
+        #[ink::test]
+        fn crear_publicacion_falla_producto_no_existe() {
+            let mut contrato = contract_dummy();
+            let vendedor = account(2);
+
+            let nombre_producto = "Producto X".to_string(); // No existe
+            let stock_a_vender = 10;
+            let precio = 1000;
+
+            let result = contrato._crear_publicacion(nombre_producto, vendedor, stock_a_vender, precio);
+
+            assert_eq!(result, Err(ErrorMarketplace::ProductoNoExiste));
+        }
+
+
         /// Tests Marketplace Helpers
         #[ink::test]
         fn validacion_producto_nombre_espacios() {
@@ -1634,7 +1626,7 @@ mod market_place {
                     assert_eq!(producto_guardado.descripcion, "Descripcion del celular");
                     assert_eq!(producto_guardado.categoria, Categoria::Tecnologia);
                 }
-                None => (),
+                None => panic!("El producto no fue insertado en el catálogo"),
             }
         }
 
@@ -1680,7 +1672,7 @@ mod market_place {
                 Some(deposito) => {
                     assert_eq!(deposito.stock, (stock_inicial - stock_a_vender));
                 }
-                None => (),
+                None => panic!("El depósito no fue actualizado"),
             }
         }
 
@@ -1799,14 +1791,6 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::StockInsuficiente));
         }
 
-        ///Test Deposito
-        #[ink::test]
-        fn actualizar_stock_ok() {
-            let mut deposito = Deposito::new(1, account(2), 10);
-            let res = deposito.actualizar_stock(20);
-            assert_eq!(res, Ok(()));
-            assert_eq!(deposito.stock, 20);
-        }
         #[ink::test]
         fn orden_new_ok() {
             let id = 1;
@@ -2062,7 +2046,7 @@ mod market_place {
                     assert_eq!(orden.vendedor, vendedor);
                     assert_eq!(orden.total, 400); // 200 * 2
                 }
-                None => (),
+                None => panic!("La orden no fue creada correctamente"),
             }
         }
 
@@ -2089,12 +2073,7 @@ mod market_place {
             assert_eq!(result, Err(ErrorMarketplace::Overflow));
         }
     }
-    //Preguntar, debemos listar en una pub fn todas las publicaciones del contrato?
-    /*
-    1. Operaciones aritméticas (líneas 796, 815, 492, 497, 621)
-    2. Comparaciones con <= 0 para tipos unsigned (líneas 799)
-    3. Imports no usados
-         */
+
 }
 
 /*
