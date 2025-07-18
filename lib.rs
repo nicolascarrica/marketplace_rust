@@ -917,7 +917,7 @@ mod market_place {
         ///
         /// # Retorna
         /// - `Ok(stock)` con la cantidad disponible si existe el depósito.
-        /// - `Err(ErrorMarketplace::ProductoNoExiste)` si no existe el depósito para el vendedor y producto dados.
+        /// - `Err(ErrorMarketplace::DepositoNoEncontrado)` si no existe el depósito para el vendedor y producto dados.
         fn obtener_stock_deposito(
             &self,
             id_vendedor: AccountId,
@@ -1190,7 +1190,7 @@ mod market_place {
         /// El caller debe ser un vendedor registrado.
         ///
         /// # Parámetros
-        /// - `id_producto`: ID del producto a publicar.
+        /// - `nombre_producto`: Nombre del producto a publicar.
         /// - `stock_a_vender`: Cantidad de producto a vender en esta publicación.
         /// - `precio`: Precio unitario.
         ///
@@ -1215,7 +1215,7 @@ mod market_place {
         /// Realiza validaciones de existencia de usuario, rol, stock y precio.
         ///
         /// # Parámetros
-        /// - `id_producto`: ID del producto.
+        /// - `nombre_producto`: Nombre del producto.
         /// - `id_vendedor`: Cuenta del vendedor.
         /// - `stock_a_vender`: Cantidad a vender.
         /// - `precio`: Precio unitario.
