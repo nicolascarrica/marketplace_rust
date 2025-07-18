@@ -918,7 +918,7 @@ mod market_place {
 
             Ok(())
         }
-      
+
         // Busca la orden con el ID dado dentro del Mapping ordenes
         /// Función privada que marca una orden como enviada.
         ///
@@ -1028,7 +1028,6 @@ mod market_place {
             let caller = self.env().caller();
             self._marcar_orden_como_recibida(caller, id_orden)
         }
-
     }
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
     /// module and test functions are marked with a `#[test]` attribute.
@@ -1983,7 +1982,7 @@ mod market_place {
     3. Imports no usados
          */
 }
-}
+
 /*
 /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
 ///
