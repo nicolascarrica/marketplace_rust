@@ -517,6 +517,7 @@ mod market_place {
         ///
         /// # Retorna
         /// Una nueva instancia de `Orden` con estado `EstadoOrden::Pendiente`.
+
         pub fn new(
             id: u32,
             comprador: AccountId,
@@ -915,7 +916,7 @@ mod market_place {
         ///
         /// # Retorna
         /// - `Ok(stock)` con la cantidad disponible si existe el depósito.
-        /// - `Err(ErrorMarketplace::ProductoNoExiste)` si no existe el depósito para el vendedor y producto dados.
+        /// - `Err(ErrorMarketplace::DepositoNoEncontrado)` si no existe el depósito para el vendedor y producto dados.
         fn obtener_stock_deposito(
             &self,
             id_vendedor: AccountId,
@@ -1046,7 +1047,7 @@ mod market_place {
             // Verificar que el usuario sea vendedor
             self.verificar_rol_vendedor(id_vendedor)?;
             // Verificar que el stock sea válido
-            Producto::validar_stock_producto(&stock)?; // Preguntar al profesor u32 no tiene signo así que esta validación es inútil
+            Producto::validar_stock_producto(&stock)?;
 
             // Obtener el depósito del vendedor
             let mut deposito = self
@@ -1084,10 +1085,9 @@ mod market_place {
             // Verificar que el usuario sea vendedor
             self.verificar_rol_vendedor(id_vendedor)?;
             // Verificar que el stock sea válido
-            Producto::validar_stock_producto(&stock)?; // Preguntar al profesor u32 no tiene signo así que esta validación es inútil
-                                                       // Crear un nuevo depósito
+            Producto::validar_stock_producto(&stock)?;
+            // Crear un nuevo depósito
             let deposito = Deposito::new(id_producto, id_vendedor, stock);
-
             // Insertar el depósito en el mapping
             self.stock_general
                 .insert((id_vendedor, id_producto), &deposito);
@@ -1111,10 +1111,9 @@ mod market_place {
             username: String,
             rol: Rol,
         ) -> Result<(), ErrorMarketplace> {
-            //deberiamos ver como manejar el error
-            let caller = self.env().caller(); //id
+            let caller = self.env().caller();
             self._registrar_usuario(username, rol, caller)?;
-            Ok(()) //no devuelve nada porque solo inserta en el map de sistema
+            Ok(())
         }
 
         /// Helper interno para registrar un usuario.
@@ -1190,7 +1189,7 @@ mod market_place {
         /// El caller debe ser un vendedor registrado.
         ///
         /// # Parámetros
-        /// - `id_producto`: ID del producto a publicar.
+        /// - `nombre_producto`: Nombre del producto a publicar.
         /// - `stock_a_vender`: Cantidad de producto a vender en esta publicación.
         /// - `precio`: Precio unitario.
         ///
@@ -1206,12 +1205,7 @@ mod market_place {
         ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
             //llamar helper de crear publicacion
-            self._crear_publicacion(
-                nombre_producto,
-                caller, // id del vendedor
-                stock_a_vender,
-                precio,
-            )?;
+            self._crear_publicacion(nombre_producto, caller, stock_a_vender, precio)?;
             Ok(())
         }
 
@@ -1220,7 +1214,7 @@ mod market_place {
         /// Realiza validaciones de existencia de usuario, rol, stock y precio.
         ///
         /// # Parámetros
-        /// - `id_producto`: ID del producto.
+        /// - `nombre_producto`: Nombre del producto.
         /// - `id_vendedor`: Cuenta del vendedor.
         /// - `stock_a_vender`: Cantidad a vender.
         /// - `precio`: Precio unitario.
@@ -1239,9 +1233,11 @@ mod market_place {
             self.verificar_rol_vendedor(id_vendedor)?;
             //Validar precio
             Publicacion::validar_precio(&precio)?;
-            //normalizar nombre de producto y validar que exista en el catalogo
+            //normalizar nombre de producto
             let nombre_producto_normalizado =
                 Producto::normalizar_nombre_producto(&nombre_producto);
+
+            // validar que exista en el catalogo
             let id_producto = self
                 .buscar_producto_por_nombre(&nombre_producto_normalizado)
                 .map_err(|_| ErrorMarketplace::ProductoNoExiste)?;
@@ -1317,8 +1313,6 @@ mod market_place {
                 Some(valor) => valor,
                 None => return Err(ErrorMarketplace::Overflow),
             };
-
-            //buscar documentacion de ink para calculos aritmeticos
             // Verificar que el monto dado sea suficiente para cubrir el total de la orden
             if monto_dado < tot_orden {
                 return Err(ErrorMarketplace::MontoInsuficiente);
@@ -1345,6 +1339,7 @@ mod market_place {
             Ok(())
         }
 
+        // Busca la orden con el ID dado dentro del Mapping ordenes
         /// Función privada que marca una orden como enviada.
         ///
         /// # Parámetros
