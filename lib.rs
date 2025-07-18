@@ -147,24 +147,24 @@ mod market_place {
                 verificacion: true,
             }
         }
-    }
-    // Helper validar rol vendedor
-    fn validar_rol_vendedor(rol: &Rol) -> Result<(), ErrorMarketplace> {
-        if *rol == Rol::Vendedor || *rol == Rol::Ambos {
-            Ok(())
-        } else {
-            Err(ErrorMarketplace::RolInvalido)
+        // Helper validar rol vendedor
+        fn validar_rol_vendedor(rol: &Rol) -> Result<(), ErrorMarketplace> {
+            if *rol == Rol::Vendedor || *rol == Rol::Ambos {
+                Ok(())
+            } else {
+                Err(ErrorMarketplace::RolInvalido)
+            }
+        }
+
+        // Helper validar rol comprador
+        fn validar_rol_comprador(rol: &Rol) -> Result<(), ErrorMarketplace> {
+            if *rol == Rol::Comprador || *rol == Rol::Ambos {
+                Ok(())
+            } else {
+                Err(ErrorMarketplace::RolInvalido)
+            }
         }
     }
-
-    fn validar_rol_comprador(rol: &Rol) -> Result<(), ErrorMarketplace> {
-        if *rol == Rol::Comprador || *rol == Rol::Ambos {
-            Ok(())
-        } else {
-            Err(ErrorMarketplace::RolInvalido)
-        }
-    }
-
     #[derive(
         Debug,
         Clone,
@@ -195,32 +195,33 @@ mod market_place {
                 categoria,
             }
         }
-    }
-    //Helper validar nombre de producto
-    fn validar_nombre_producto(nombre: &String) -> Result<(), ErrorMarketplace> {
-        if nombre.is_empty() || nombre.trim().is_empty() {
-            return Err(ErrorMarketplace::NombreInvalido);
+
+        //Helper validar nombre de producto
+        fn validar_nombre_producto(nombre: &String) -> Result<(), ErrorMarketplace> {
+            if nombre.is_empty() || nombre.trim().is_empty() {
+                return Err(ErrorMarketplace::NombreInvalido);
+            }
+            Ok(())
         }
-        Ok(())
-    }
-    // Helper normalizar nombre de producto
-    fn normalizar_nombre_producto(nombre: &String) -> String {
-        // Normaliza el nombre del producto a minúsculas y elimina espacios extra
-        nombre.to_lowercase().trim().to_string()
-    }
-    // Helper validar descripcion de producto
-    fn validar_descripcion(descripcion: &String) -> Result<(), ErrorMarketplace> {
-        if descripcion.is_empty() || descripcion.trim().is_empty() {
-            return Err(ErrorMarketplace::DescripcionInvalida);
+        // Helper normalizar nombre de producto
+        fn normalizar_nombre_producto(nombre: &String) -> String {
+            // Normaliza el nombre del producto a minúsculas y elimina espacios extra
+            nombre.to_lowercase().trim().to_string()
         }
-        Ok(())
-    }
-    //Helper validar stock de producto
-    fn validar_stock_producto(stock: &u32) -> Result<(), ErrorMarketplace> {
-        if *stock == 0 {
-            return Err(ErrorMarketplace::StockInsuficiente);
+        // Helper validar descripcion de producto
+        fn validar_descripcion(descripcion: &String) -> Result<(), ErrorMarketplace> {
+            if descripcion.is_empty() || descripcion.trim().is_empty() {
+                return Err(ErrorMarketplace::DescripcionInvalida);
+            }
+            Ok(())
         }
-        Ok(())
+        //Helper validar stock de producto
+        fn validar_stock_producto(stock: &u32) -> Result<(), ErrorMarketplace> {
+            if *stock == 0 {
+                return Err(ErrorMarketplace::StockInsuficiente);
+            }
+            Ok(())
+        }
     }
     #[derive(
         Debug,
@@ -263,13 +264,13 @@ mod market_place {
             }
             Ok(())
         }
-    }
-    /// Helper para validar el precio de un producto.
-    fn validar_precio(precio: &u128) -> Result<(), ErrorMarketplace> {
-        if *precio == 0 {
-            return Err(ErrorMarketplace::PrecioInvalido);
+        /// Helper para validar el precio de un producto.
+        fn validar_precio(precio: &u128) -> Result<(), ErrorMarketplace> {
+            if *precio == 0 {
+                return Err(ErrorMarketplace::PrecioInvalido);
+            }
+            Ok(())
         }
-        Ok(())
     }
 
     #[derive(
@@ -398,11 +399,11 @@ mod market_place {
         ) -> Result<(), ErrorMarketplace> {
             self.verificar_rol_vendedor(id_vendedor)?;
             //validar producto
-            validar_nombre_producto(&nombre)?;
+            Producto::validar_nombre_producto(&nombre)?;
             //validar descripcion
-            validar_descripcion(&descripcion)?;
+            Producto::validar_descripcion(&descripcion)?;
             //Normalizar nombre
-            let nombre_normalizado = normalizar_nombre_producto(&nombre);
+            let nombre_normalizado = Producto::normalizar_nombre_producto(&nombre);
             //buscar en catalogo traigo el id del producto si existe con el nombre normalizado
             match self.buscar_producto_por_nombre(&nombre_normalizado) {
                 // Si el producto NO existe, lo creamos y asociamos depósito al vendedor
@@ -458,14 +459,14 @@ mod market_place {
         //Helper verificar que el usuario tenga el rol correcto
         fn verificar_rol_vendedor(&self, id: AccountId) -> Result<(), ErrorMarketplace> {
             let usuario = self.verificar_usuario_existe(id)?;
-            validar_rol_vendedor(&usuario.rol)?;
+            Usuario::validar_rol_vendedor(&usuario.rol)?;
             Ok(())
         }
 
         //Helper verificar que el usuario tenga el rol correcto
         fn verificar_rol_comprador(&self, id: AccountId) -> Result<(), ErrorMarketplace> {
             let usuario = self.verificar_usuario_existe(id)?;
-            validar_rol_comprador(&usuario.rol)?;
+            Usuario::validar_rol_comprador(&usuario.rol)?;
             Ok(())
         }
 
@@ -490,10 +491,11 @@ mod market_place {
 
         //Helper para buscar nombre de producto
         fn buscar_producto_por_nombre(&self, nombre: &String) -> Result<u32, ErrorMarketplace> {
-            let nombre_normalizado = normalizar_nombre_producto(nombre);
+            let nombre_normalizado = Producto::normalizar_nombre_producto(nombre);
             for id in 1..=self.contador_productos {
                 if let Some(producto) = self.productos.get(&id) {
-                    if normalizar_nombre_producto(&producto.nombre) == nombre_normalizado {
+                    if Producto::normalizar_nombre_producto(&producto.nombre) == nombre_normalizado
+                    {
                         return Ok(id);
                     }
                 }
@@ -627,7 +629,7 @@ mod market_place {
             // Verificar que el usuario sea vendedor
             self.verificar_rol_vendedor(id_vendedor)?;
             // Verificar que el stock sea válido
-            validar_stock_producto(&stock)?; // Preguntar al profesor u32 no tiene signo así que esta validación es inútil
+            Producto::validar_stock_producto(&stock)?; // Preguntar al profesor u32 no tiene signo así que esta validación es inútil
 
             // Obtener el depósito del vendedor
             let mut deposito = self
@@ -652,8 +654,8 @@ mod market_place {
             // Verificar que el usuario sea vendedor
             self.verificar_rol_vendedor(id_vendedor)?;
             // Verificar que el stock sea válido
-            validar_stock_producto(&stock)?; // Preguntar al profesor u32 no tiene signo así que esta validación es inútil
-                                             // Crear un nuevo depósito
+            Producto::validar_stock_producto(&stock)?; // Preguntar al profesor u32 no tiene signo así que esta validación es inútil
+                                                       // Crear un nuevo depósito
             let deposito = Deposito::new(id_producto, id_vendedor, stock);
 
             // Insertar el depósito en el mapping
@@ -743,7 +745,7 @@ mod market_place {
             self.verificar_usuario_existe(id_vendedor)?;
             self.verificar_rol_vendedor(id_vendedor)?;
             //Validar precio
-            validar_precio(&precio)?;
+            Publicacion::validar_precio(&precio)?;
             //Validar stock para vender es menor o igual al stock total del deposito
             self.validar_stock_deposito(id_vendedor, id_producto, stock_a_vender)?;
 
@@ -1001,7 +1003,7 @@ mod market_place {
         #[ink::test]
         fn validacion_producto_nombre_espacios() {
             let nombre = String::from("   ");
-            let res = validar_nombre_producto(&nombre);
+            let res = Producto::validar_nombre_producto(&nombre);
             assert_eq!(res, Err(ErrorMarketplace::NombreInvalido));
         }
         #[ink::test]
@@ -1009,8 +1011,8 @@ mod market_place {
             let descripcion_vacia = String::from("");
             let descripcion_espacios = String::from("   ");
 
-            let res_vacia = validar_descripcion(&descripcion_vacia);
-            let res_espacios = validar_descripcion(&descripcion_espacios);
+            let res_vacia = Producto::validar_descripcion(&descripcion_vacia);
+            let res_espacios = Producto::validar_descripcion(&descripcion_espacios);
 
             assert_eq!(res_vacia, Err(ErrorMarketplace::DescripcionInvalida));
             assert_eq!(res_espacios, Err(ErrorMarketplace::DescripcionInvalida));
@@ -1071,7 +1073,7 @@ mod market_place {
         #[ink::test]
         fn validar_stock_producto_error_stock_insuficiente() {
             let stock = 0u32;
-            let res = validar_stock_producto(&stock);
+            let res = Producto::validar_stock_producto(&stock);
             assert_eq!(res, Err(ErrorMarketplace::StockInsuficiente));
         }
         #[ink::test]
@@ -1288,14 +1290,14 @@ mod market_place {
         #[ink::test]
         fn validar_precio_ok() {
             let precio = 100u128;
-            let res = validar_precio(&precio);
+            let res = Publicacion::validar_precio(&precio);
             assert_eq!(res, Ok(()));
         }
 
         #[ink::test]
         fn validar_precio_error_precio_invalido() {
             let precio = 0u128;
-            let res = validar_precio(&precio);
+            let res = Publicacion::validar_precio(&precio);
             assert_eq!(res, Err(ErrorMarketplace::PrecioInvalido));
         }
 
