@@ -3,8 +3,8 @@
 #[ink::contract]
 mod market_place {
     // use core::char::CharTryFromError;
-
     use ink::prelude::string::String;
+    use ink::prelude::string::ToString;
     // use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
     //use ink_e2e::sr25519::PublicKey;
@@ -16,17 +16,9 @@ mod market_place {
     /// - `Comprador`: Solo puede comprar productos
     /// - `Vendedor`: Solo puede vender productos
     /// - `Ambos`: Puede tanto comprar como vender
-    #[derive(
-        Debug,
-        Clone,
-        Copy,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub enum Rol {
         Comprador,
         Vendedor,
@@ -41,16 +33,9 @@ mod market_place {
     /// - `Hogar`: Muebles, decoración, electrodomésticos
     /// - `Alimentos`: Comida, bebidas, productos alimenticios
     /// - `Otros`: Cualquier producto que no encaje en las categorías anteriores
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub enum Categoria {
         Tecnologia,
         Indumentaria,
@@ -66,16 +51,9 @@ mod market_place {
     /// - `Enviado`: Vendedor ha enviado el producto
     /// - `Recibido`: Comprador ha recibido y confirmado el producto
     /// - `Cancelada`: Orden cancelada por alguna de las partes
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub enum EstadoOrden {
         Pendiente,
         Enviado,
@@ -129,16 +107,9 @@ mod market_place {
     /// - `id`: Identificador único de la cuenta (AccountId)
     /// - `verificacion`: Estado de verificación del usuario
     ///
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub struct Usuario {
         username: String,
         rol: Rol,
@@ -208,16 +179,9 @@ mod market_place {
     /// - `precio`: Precio del producto en la moneda nativa
     /// - `categoria`: Categoría a la que pertenece el producto
     ///
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub struct Producto {
         id_producto: u32,
         nombre: String,
@@ -321,16 +285,9 @@ mod market_place {
     /// - `vendedor`: AccountId del vendedor
     /// - `stock_publicacion`: Cantidad disponible en esta publicación
     /// - `precio`: Precio del producto en la moneda nativa
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub struct Publicacion {
         id_publicacion: u32,
         id_vendedor: AccountId,
@@ -411,15 +368,9 @@ mod market_place {
     /// - `cant_producto`: Cantidad solicitada del producto.
     /// - `estado`: Estado actual de la orden (Pendiente, Enviado, Recibido, Cancelada).
     /// - `total`: Monto total de la orden (precio * cantidad)
-    #[derive(
-        Debug,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub struct Orden {
         id: u32,
         comprador: AccountId,
@@ -439,15 +390,9 @@ mod market_place {
     /// - `id_producto`: Identificador único del producto asociado al depósito.
     /// - `id_vendedor`: `AccountId` del vendedor dueño del depósito.
     /// - `stock`: Cantidad de unidades disponibles en el depósito.
-    #[derive(
-        Debug,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        scale_info::TypeInfo,
-        ink::storage::traits::StorageLayout,
-    )]
+    #[derive(Debug, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub struct Deposito {
         id_producto: u32,
         id_vendedor: AccountId,
