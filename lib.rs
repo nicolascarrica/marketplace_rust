@@ -10,7 +10,13 @@ mod market_place {
     //use ink_e2e::sr25519::PublicKey;
     //use ink_e2e::subxt_signer::bip39::serde::de::value::Error;
 
-    /// Enums
+
+    /// Representa los roles posibles que puede tener un usuario dentro del marketplace.
+    /// 
+    /// # Variantes
+    /// - `Comprador`: Solo puede comprar productos
+    /// - `Vendedor`: Solo puede vender productos
+    /// - `Ambos`: Puede tanto comprar como vender
     #[derive(
         Debug,
         Clone,
@@ -28,6 +34,14 @@ mod market_place {
         Ambos,
     }
 
+    /// Categorías disponibles para clasificar productos en el marketplace.
+    /// 
+    /// # Variantes
+    /// - `Tecnologia`: Dispositivos electrónicos, software, etc.
+    /// - `Indumentaria`: Ropa, accesorios, calzado
+    /// - `Hogar`: Muebles, decoración, electrodomésticos
+    /// - `Alimentos`: Comida, bebidas, productos alimenticios
+    /// - `Otros`: Cualquier producto que no encaje en las categorías anteriores
     #[derive(
         Debug,
         Clone,
@@ -45,6 +59,14 @@ mod market_place {
         Alimentos,
         Otros,
     }
+
+    /// Estados posibles que puede tener una orden de compra a lo largo de su ciclo de vida.
+    /// 
+    /// # Variantes
+    /// - `Pendiente`: Orden creada, esperando procesamiento del vendedor
+    /// - `Enviado`: Vendedor ha enviado el producto
+    /// - `Recibido`: Comprador ha recibido y confirmado el producto
+    /// - `Cancelada`: Orden cancelada por alguna de las partes
     #[derive(
         Debug,
         Clone,
@@ -62,6 +84,11 @@ mod market_place {
         Cancelada,
     }
 
+    /// ## Errores del Marketplace
+    /// 
+    /// Define todos los posibles errores que pueden ocurrir durante las operaciones del marketplace.
+    /// Cada error incluye una descripción específica del problema encontrado.
+    
     //Enum Errores
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
@@ -94,6 +121,15 @@ mod market_place {
         DepositoNoEncontrado,
     }
     // Structs
+
+    /// Representa a un usuario registrado en el marketplace.
+    /// 
+    /// # Campos
+    /// - `username`: Nombre de usuario único
+    /// - `rol`: Rol del usuario (Comprador, Vendedor, Ambos)
+    /// - `id`: Identificador único de la cuenta (AccountId)
+    /// - `verificacion`: Estado de verificación del usuario
+    /// 
     #[derive(
         Debug,
         Clone,
@@ -111,13 +147,15 @@ mod market_place {
         verificacion: bool,
     }
     impl Usuario {
-        /// Registra un nuevo usuario en el sistema con su rol.
+        /// Crea un nuevo usuario verificado.
+        ///
         /// # Parámetros
-        /// - `username`: nombre público visible del usuario.
-        /// - `rol`: rol del usuario (Comprador, Vendedor o Ambos).
+        /// - `username`: Nombre público del usuario.
+        /// - `rol`: Rol asignado (Comprador, Vendedor, Ambos).
+        /// - `id`: Cuenta (AccountId) asociada al usuario.
+        ///
         /// # Retorna
-        /// - `Ok(())` si el registro fue exitoso.
-        /// - `Err(ErrorMarketplace::UsuarioYaRegistrado)` si el usuario ya existe.
+        /// Instancia de `Usuario` con verificación activa.
         pub fn new(username: String, rol: Rol, id: AccountId) -> Self {
             Self {
                 username,
@@ -126,7 +164,16 @@ mod market_place {
                 verificacion: true,
             }
         }
+        
         // Helper validar rol vendedor
+        /// Valida que el rol del usuario permita actuar como vendedor.
+        ///
+        /// # Parámetros
+        /// - `rol`: Referencia al rol a validar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si el rol es Vendedor o Ambos.
+        /// - `Err(ErrorMarketplace::RolInvalido)` en caso contrario.
         fn validar_rol_vendedor(rol: &Rol) -> Result<(), ErrorMarketplace> {
             if *rol == Rol::Vendedor || *rol == Rol::Ambos {
                 Ok(())
@@ -136,6 +183,14 @@ mod market_place {
         }
 
         // Helper validar rol comprador
+        /// Valida que el rol del usuario permita actuar como comprador.
+        ///
+        /// # Parámetros
+        /// - `rol`: Referencia al rol a validar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si el rol es Comprador o Ambos.
+        /// - `Err(ErrorMarketplace::RolInvalido)` en caso contrario.
         fn validar_rol_comprador(rol: &Rol) -> Result<(), ErrorMarketplace> {
             if *rol == Rol::Comprador || *rol == Rol::Ambos {
                 Ok(())
@@ -144,6 +199,16 @@ mod market_place {
             }
         }
     }
+
+    /// Representa un producto en el marketplace.
+    /// 
+    /// # Campos
+    /// - `id`: Identificador único del producto
+    /// - `nombre`: Nombre del producto
+    /// - `descripcion`: Descripción detallada del producto
+    /// - `precio`: Precio del producto en la moneda nativa
+    /// - `categoria`: Categoría a la que pertenece el producto
+    /// 
     #[derive(
         Debug,
         Clone,
@@ -161,6 +226,17 @@ mod market_place {
         categoria: Categoria,
     }
     impl Producto {
+
+        /// Crea una nueva instancia de un producto.
+        ///
+        /// # Parámetros
+        /// - `id_producto`: ID único del producto.
+        /// - `nombre`: Nombre del producto.
+        /// - `descripcion`: Detalle descriptivo del producto.
+        /// - `categoria`: Categoría a la que pertenece.
+        ///
+        /// # Retorna
+        /// Una nueva instancia de `Producto`.
         pub fn new(
             id_producto: u32,
             nombre: String,
@@ -176,18 +252,47 @@ mod market_place {
         }
 
         //Helper validar nombre de producto
+        /// Verifica si el nombre del producto es válido.
+        ///
+        /// # Parámetros
+        /// - `nombre`: Nombre a validar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si el nombre es válido.
+        /// - `Err(ErrorMarketplace::NombreInvalido)` si está vacío o sólo contiene espacios.
         fn validar_nombre_producto(nombre: &String) -> Result<(), ErrorMarketplace> {
             if nombre.is_empty() || nombre.trim().is_empty() {
                 return Err(ErrorMarketplace::NombreInvalido);
             }
             Ok(())
         }
+
         // Helper normalizar nombre de producto
+        /// Normaliza el nombre del producto.
+        ///
+        /// Convierte a minúsculas y elimina espacios sobrantes.
+        ///
+        /// # Parámetros
+        /// - `nombre`: Nombre a normalizar.
+        ///
+        /// # Retorna
+        /// Una nueva cadena con el nombre formateado.
+        
         fn normalizar_nombre_producto(nombre: &String) -> String {
             // Normaliza el nombre del producto a minúsculas y elimina espacios extra
             nombre.to_lowercase().trim().to_string()
         }
+
+
         // Helper validar descripcion de producto
+        /// Valida si la descripción del producto es adecuada.
+        ///
+        /// # Parámetros
+        /// - `descripcion`: Descripción a validar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si la descripción es válida.
+        /// - `Err(ErrorMarketplace::DescripcionInvalida)` si está vacía o sólo tiene espacios.
         fn validar_descripcion(descripcion: &String) -> Result<(), ErrorMarketplace> {
             if descripcion.is_empty() || descripcion.trim().is_empty() {
                 return Err(ErrorMarketplace::DescripcionInvalida);
@@ -195,6 +300,14 @@ mod market_place {
             Ok(())
         }
         //Helper validar stock de producto
+         /// Valida si el stock de un producto es mayor a cero.
+        ///
+        /// # Parámetros
+        /// - `stock`: Cantidad de stock a validar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si el stock es mayor a cero.
+        /// - `Err(ErrorMarketplace::StockInsuficiente)` si es igual a cero.
         fn validar_stock_producto(stock: &u32) -> Result<(), ErrorMarketplace> {
             if *stock == 0 {
                 return Err(ErrorMarketplace::StockInsuficiente);
@@ -202,6 +315,15 @@ mod market_place {
             Ok(())
         }
     }
+
+    /// Representa una publicación de producto en el marketplace.
+    /// 
+    /// # Campos
+    /// - `id`: Identificador único de la publicación
+    /// - `producto_id`: ID del producto publicado
+    /// - `vendedor`: AccountId del vendedor
+    /// - `stock_publicacion`: Cantidad disponible en esta publicación
+    /// - `precio`: Precio del producto en la moneda nativa
     #[derive(
         Debug,
         Clone,
@@ -219,7 +341,18 @@ mod market_place {
         precio: u128,
         stock_a_vender: u32,
     }
-
+    
+    /// Crea una nueva instancia de una publicación.
+    ///
+    /// # Parámetros
+    /// - `id_publicacion`: Identificador único para la publicación.
+    /// - `id_vendedor`: Cuenta del vendedor que publica.
+    /// - `id_producto`: Producto asociado a esta publicación.
+    /// - `precio`: Precio por unidad del producto.
+    /// - `stock_a_vender`: Cantidad disponible para la venta.
+    ///
+    /// # Retorna
+    /// Una nueva instancia de `Publicacion`.
     impl Publicacion {
         fn new(
             id_publicacion: u32,
@@ -237,13 +370,29 @@ mod market_place {
             }
         }
 
+        /// Verifica si hay stock suficiente disponible para una orden.
+        ///
+        /// # Parámetros
+        /// - `stock_pedido`: Cantidad que se desea comprar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si hay suficiente stock disponible.
+        /// - `Err(ErrorMarketplace::StockInsuficiente)` si no hay stock suficiente.
         fn verificar_stock(&self, stock_pedido: u32) -> Result<(), ErrorMarketplace> {
             if stock_pedido > self.stock_a_vender {
                 return Err(ErrorMarketplace::StockInsuficiente);
             }
             Ok(())
         }
-        /// Helper para validar el precio de un producto.
+        // Helper para validar el precio de un producto.
+        /// Valida que el precio ingresado sea mayor a cero.
+        ///
+        /// # Parámetros
+        /// - `precio`: Precio a validar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si el precio es válido.
+        /// - `Err(ErrorMarketplace::PrecioInvalido)` si el precio es igual a cero.
         fn validar_precio(precio: &u128) -> Result<(), ErrorMarketplace> {
             if *precio == 0 {
                 return Err(ErrorMarketplace::PrecioInvalido);
@@ -252,6 +401,20 @@ mod market_place {
         }
     }
 
+    
+    /// Representa una orden de compra en el marketplace.
+    ///
+    /// Cada orden vincula a un comprador con un producto publicado por un vendedor.
+    /// Contiene la cantidad solicitada, el monto total y su estado actual.
+    ///
+    /// # Campos
+    /// - `id`: Identificador único de la orden.
+    /// - `comprador`: `AccountId` del usuario que realizó la compra.
+    /// - `vendedor`: `AccountId` del usuario que publicó el producto.
+    /// - `id_producto`: ID del producto incluido en la orden.
+    /// - `cant_producto`: Cantidad solicitada del producto.
+    /// - `estado`: Estado actual de la orden (Pendiente, Enviado, Recibido, Cancelada).
+    /// - `total`: Monto total de la orden (precio * cantidad)
     #[derive(
         Debug,
         PartialEq,
@@ -270,7 +433,48 @@ mod market_place {
         estado: EstadoOrden,
         total: u128,
     }
+    impl Orden {
+        /// Crea una nueva orden de compra con estado inicial `Pendiente`.
+        ///
+        /// # Parámetros
+        /// - `id`: Identificador único para la orden.
+        /// - `comprador`: `AccountId` del usuario que realiza la compra.
+        /// - `vendedor`: `AccountId` del vendedor que publicó el producto.
+        /// - `id_producto`: ID del producto solicitado.
+        /// - `cant_producto`: Cantidad del producto a comprar.
+        /// - `total`: Monto total de la orden (precio * cantidad).
+        ///
+        /// # Retorna
+        /// Una nueva instancia de `Orden` con estado `EstadoOrden::Pendiente`.
+        pub fn new(
+            id: u32,
+            comprador: AccountId,
+            vendedor: AccountId,
+            id_producto: u32,
+            cant_producto: u16,
+            total: u128,
+        ) -> Self {
+            Self {
+                id,
+                comprador,
+                vendedor,
+                id_producto,
+                cant_producto,
+                total,
+                estado: EstadoOrden::Pendiente,
+            }
+        }
+    }
 
+    /// Representa el depósito de un vendedor para un producto específico.
+    ///
+    /// Cada vendedor tiene un depósito individual por producto, donde se almacena el stock disponible.
+    /// El depósito se inicializa al registrar un nuevo producto o agregar stock de uno ya existente.
+    ///
+    /// # Campos
+    /// - `id_producto`: Identificador único del producto asociado al depósito.
+    /// - `id_vendedor`: `AccountId` del vendedor dueño del depósito.
+    /// - `stock`: Cantidad de unidades disponibles en el depósito.
     #[derive(
         Debug,
         PartialEq,
@@ -286,6 +490,15 @@ mod market_place {
         stock: u32,
     }
     impl Deposito {
+        /// Crea un nuevo depósito para un producto y un vendedor determinado.
+        ///
+        /// # Parámetros
+        /// - `id_producto`: ID del producto asociado.
+        /// - `id_vendedor`: Cuenta del vendedor dueño del depósito.
+        /// - `stock`: Cantidad inicial disponible.
+        ///
+        /// # Retorna
+        /// Una nueva instancia de `Deposito`.
         pub fn new(id_producto: u32, id_vendedor: AccountId, stock: u32) -> Self {
             Self {
                 id_producto,
@@ -299,9 +512,20 @@ mod market_place {
         }
     }
 
-    /// Defines the storage of your contract.
-    /// Add new fields to the below struct in order
-    /// to add new static storage fields to your contract.
+    /// Contrato principal del marketplace descentralizado.
+    ///
+    /// Gestiona usuarios, productos, depósitos, publicaciones y órdenes de compra.
+    /// Almacena mappings y contadores necesarios para operar el sistema.
+    ///
+    /// # Campos
+    /// - `usuarios`: Mapping de usuarios registrados.
+    /// - `productos`: Mapping de productos registrados.
+    /// - `publicaciones`: Mapping de publicaciones activas.
+    /// - `ordenes`: Mapping de órdenes de compra.
+    /// - `stock_general`: Mapping de depósitos por producto y vendedor.
+    /// - `contador_ordenes`: ID incremental de órdenes.
+    /// - `contador_publicacion`: ID incremental de publicaciones.
+    /// - `contador_productos`: ID incremental de productos.
     #[ink(storage)]
     pub struct MarketPlace {
         usuarios: Mapping<AccountId, Usuario>, //id_usuario -> Usuario, todos los usuarios
@@ -315,6 +539,7 @@ mod market_place {
         contador_productos: u32,
         //aca iria lo de reputacion, creo
     }
+
 
     impl Orden {
         pub fn new(
@@ -404,10 +629,9 @@ mod market_place {
     }
 
     impl MarketPlace {
-        /// Crea una nueva instancia del contrato MarketPlace.
-        /// # Retorna
-        /// Un contrato con mapas vacíos y contadores en cero.
+
         #[ink(constructor)]
+        /// Inicializa un nuevo contrato `MarketPlace` con todos los mappings vacíos y contadores en cero.
         pub fn new() -> Self {
             Self {
                 usuarios: Mapping::default(),
@@ -420,7 +644,22 @@ mod market_place {
                 contador_productos: 0,
             }
         }
-        //documentar bien
+        
+        /// Registra un nuevo producto para el vendedor que llama a la función.
+        ///
+        /// Valida los datos, normaliza el nombre, crea el producto si no existe,
+        /// o inicializa un depósito si el producto ya existe pero no para este vendedor.
+        ///
+        /// # Parámetros
+        /// - `nombre`: Nombre del producto.
+        /// - `descripcion`: Descripción del producto.
+        /// - `categoria`: Categoría del producto.
+        /// - `stock`: Stock inicial del producto.
+        ///
+        /// # Errores
+        /// - `RolInvalido`: Si el usuario no es vendedor.
+        /// - `ProductoYaPoseeDeposito`: Si el vendedor ya tiene depósito para ese producto.
+        /// - Otros errores de validación.
         #[ink(message)]
         pub fn registrar_producto(
             &mut self,
@@ -434,6 +673,11 @@ mod market_place {
             Ok(())
         }
 
+        /// Lógica interna para registrar un producto asociado a un vendedor específico.
+        ///
+        /// Busca si el producto existe por nombre normalizado.
+        /// Si no existe, lo crea y crea depósito con el stock dado.
+        /// Si existe, verifica que el vendedor no tenga depósito y lo inicializa.
         fn _registrar_producto(
             &mut self,
             id_vendedor: AccountId,
@@ -482,6 +726,14 @@ mod market_place {
         }
 
         //FUNCIONES AUXILIARES
+        /// Verifica que el rol actual de un usuario sea diferente al nuevo rol que se quiere asignar.
+        ///
+        /// Esto previene cambios innecesarios o errores al intentar asignar el mismo rol.
+        /// Retorna error `RolYaAsignado` si el rol es idéntico.
+        ///
+        /// # Parámetros
+        /// - `id`: ID del usuario a verificar.
+        /// - `nuevo_rol`: Nuevo rol que se desea asignar.
         fn verificar_rol_es_diferente(
             &self,
             id: AccountId,
@@ -496,12 +748,25 @@ mod market_place {
         }
 
         //Helper verificar usuario exista
+        /// Busca un usuario por su `AccountId` y devuelve su struct `Usuario`.
+        ///
+        /// Retorna error `UsuarioNoExiste` si no está registrado.
+        ///
+        /// # Parámetros
+        /// - `id`: Cuenta del usuario.
         fn verificar_usuario_existe(&self, id: AccountId) -> Result<Usuario, ErrorMarketplace> {
             self.usuarios
                 .get(&id)
                 .ok_or(ErrorMarketplace::UsuarioNoExiste)
         }
+
         //Helper verificar que el usuario tenga el rol correcto
+        /// Verifica que un usuario tenga rol de vendedor.
+        ///
+        /// Retorna error si el usuario no existe o si su rol no es vendedor.
+        ///
+        /// # Parámetros
+        /// - `id`: Cuenta del usuario.
         fn verificar_rol_vendedor(&self, id: AccountId) -> Result<(), ErrorMarketplace> {
             let usuario = self.verificar_usuario_existe(id)?;
             Usuario::validar_rol_vendedor(&usuario.rol)?;
@@ -509,6 +774,12 @@ mod market_place {
         }
 
         //Helper verificar que el usuario tenga el rol correcto
+        /// Verifica que un usuario tenga rol de comprador.
+        ///
+        /// Retorna error si el usuario no existe o si su rol no es comprador.
+        ///
+        /// # Parámetros
+        /// - `id`: Cuenta del usuario.
         fn verificar_rol_comprador(&self, id: AccountId) -> Result<(), ErrorMarketplace> {
             let usuario = self.verificar_usuario_existe(id)?;
             Usuario::validar_rol_comprador(&usuario.rol)?;
@@ -516,6 +787,12 @@ mod market_place {
         }
 
         //Helper para obtener una publicacion por id
+        /// Devuelve la publicación asociada a un ID dado.
+        ///
+        /// Retorna error `PublicacionNoExiste` si no se encuentra.
+        ///
+        /// # Parámetros
+        /// - `id_publicacion`: ID de la publicación.
         fn obtener_publicacion(
             &self,
             id_publicacion: u32,
@@ -526,6 +803,11 @@ mod market_place {
         }
 
         //Helper para verificar si un producto existe y no tiene deposito para el vendedor
+        /// Indica si un vendedor tiene un depósito activo para un producto dado.
+        ///
+        /// # Parámetros
+        /// - `id_vendedor`: Cuenta del vendedor.
+        /// - `id_producto`: ID del producto.
         fn vendedor_tiene_deposito_para_producto(
             &self,
             id_vendedor: AccountId,
@@ -535,6 +817,14 @@ mod market_place {
         }
 
         //Helper para buscar nombre de producto
+        /// Busca un producto por nombre normalizado y devuelve su ID.
+        ///
+        /// Recorre el catálogo de productos registrados.
+        ///
+        /// Retorna error `ProductoNoExiste` si no encuentra coincidencias.
+        ///
+        /// # Parámetros
+        /// - `nombre`: Nombre normalizado del producto.
         fn buscar_producto_por_nombre(&self, nombre: &String) -> Result<u32, ErrorMarketplace> {
             let nombre_normalizado = Producto::normalizar_nombre_producto(nombre);
             for id in 1..=self.contador_productos {
@@ -549,6 +839,9 @@ mod market_place {
         }
 
         //Helper para obtener un nuevo id de publicacion
+        /// Incrementa y devuelve un nuevo ID para una publicación.
+        ///
+        /// Retorna error si el contador excede el límite permitido.
         fn obtener_nuevo_id_publicacion(&mut self) -> Result<u32, ErrorMarketplace> {
             self.contador_publicacion = self
                 .contador_publicacion
@@ -556,7 +849,11 @@ mod market_place {
                 .ok_or(ErrorMarketplace::IDPublicacionEnUso)?;
             Ok(self.contador_publicacion)
         }
+
         //Helper para obtener nuevo id de producto
+        /// Incrementa y devuelve un nuevo ID para un producto.
+        ///
+        /// Retorna error si el contador excede el límite permitido.
         fn obtener_nuevo_id_producto(&mut self) -> Result<u32, ErrorMarketplace> {
             self.contador_productos = self
                 .contador_productos
@@ -564,7 +861,11 @@ mod market_place {
                 .ok_or(ErrorMarketplace::IDProductoEnUso)?;
             Ok(self.contador_productos)
         }
+
         //Helper para verificar que id no este en uso
+        /// Verifica que un ID de producto no esté registrado en el catálogo.
+        ///
+        /// Retorna error si el ID ya está en uso.
         fn verificar_id_producto_en_uso(&self, id_producto: u32) -> Result<(), ErrorMarketplace> {
             if self.productos.contains(&id_producto) {
                 return Err(ErrorMarketplace::IDProductoEnUso);
@@ -572,6 +873,9 @@ mod market_place {
             Ok(())
         }
         //Helper para verificar que id de publicacion no este en uso
+        /// Verifica que un ID de publicación no esté registrado.
+        ///
+        /// Retorna error si el ID ya está en uso.
         fn verificar_id_publicacion_en_uso(
             &self,
             id_publicacion: u32,
@@ -581,7 +885,18 @@ mod market_place {
             }
             Ok(())
         }
+
         //Helper para insertar producto en el catalogo de productos
+        /// Inserta un producto nuevo en el catálogo.
+        ///
+        /// Verifica primero que el ID no esté en uso.
+        ///
+        /// # Parámetros
+        /// - `producto`: Producto a insertar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si la inserción fue exitosa.
+        /// - `Err(ErrorMarketplace::IDProductoEnUso)` si el ID del producto ya está en uso.
         fn insertar_producto_en_catalogo(
             &mut self,
             producto: Producto,
@@ -594,6 +909,16 @@ mod market_place {
         }
 
         /// Helper para insertar una publicación en el sistema.
+        /// /// Inserta una publicación nueva en el sistema.
+        ///
+        /// Verifica primero que el ID no esté en uso.
+        ///
+        /// # Parámetros
+        /// - `publicacion`: Publicación a insertar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si la inserción fue exitosa.
+        /// - `Err(ErrorMarketplace::IDPublicacionEnUso)` si el ID de publicación ya está en uso
         fn insertar_publicacion(
             &mut self,
             publicacion: Publicacion,
@@ -607,6 +932,17 @@ mod market_place {
         }
 
         ///Helper que devuelve el stock total de un producto en el depósito de un vendedor.
+        /// Obtiene el stock disponible de un producto en el depósito de un vendedor.
+        ///
+        /// Retorna error si el depósito no existe.
+        ///
+        /// # Parámetros
+        /// - `id_vendedor`: Cuenta del vendedor.
+        /// - `id_producto`: ID del producto.
+        ///
+        /// # Retorna
+        /// - `Ok(stock)` con la cantidad disponible si existe el depósito.
+        /// - `Err(ErrorMarketplace::ProductoNoExiste)` si no existe el depósito para el vendedor y producto dados.
         fn obtener_stock_deposito(
             &self,
             id_vendedor: AccountId,
@@ -620,6 +956,18 @@ mod market_place {
         }
 
         ///Helper para verificar que tengo suficiente stock en el depósito del vendedor.
+        /// /// Verifica que el stock en depósito sea suficiente para una venta.
+        ///
+        /// Retorna error si el stock es insuficiente.
+        ///
+        /// # Parámetros
+        /// - `id_vendedor`: Cuenta del vendedor.
+        /// - `id_producto`: ID del producto.
+        /// - `stock_a_vender`: Cantidad requerida para la venta.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si hay stock suficiente.
+        /// - `Err(ErrorMarketplace::StockDepositoInsuficiente)` si no hay stock suficiente.
         fn validar_stock_deposito(
             &self,
             id_vendedor: AccountId,
@@ -635,6 +983,19 @@ mod market_place {
         }
 
         /// Helper para actualizar el stock de un producto en el depósito de un vendedor.
+        /// /// Actualiza el stock de un producto en el depósito tras una venta.
+        ///
+        /// Realiza validaciones y persiste el nuevo stock.
+        ///
+        /// # Parámetros
+        /// - `id_vendedor`: Cuenta del vendedor.
+        /// - `id_producto`: ID del producto.
+        /// - `stock_a_vender`: Cantidad vendida a descontar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si la actualización fue exitosa.
+        /// - `Err(ErrorMarketplace::ProductoNoExiste)` si no existe el depósito.
+        /// - `Err(ErrorMarketplace::StockDepositoInsuficiente)` si el stock es insuficiente.
         fn actualizar_stock_producto(
             &mut self,
             id_vendedor: AccountId,
@@ -663,7 +1024,19 @@ mod market_place {
                 .insert((id_vendedor, id_producto), &deposito);
             Ok(())
         }
+
         ///Funcion que modifica el stock de un depósito de un vendedor.
+        /// Mensaje público para modificar el stock de un depósito.
+        ///
+        /// Llama al helper interno con el caller como vendedor.
+        ///
+        /// # Parámetros
+        /// - `id_producto`: ID del producto.
+        /// - `stock`: Nuevo stock a asignar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si la modificación fue exitosa.
+        /// - `Err(ErrorMarketplace)` si ocurre un error de validación o permisos.
         #[ink(message)]
         pub fn modificar_stock_deposito(
             &mut self,
@@ -675,6 +1048,22 @@ mod market_place {
             Ok(())
         }
 
+        /// Helper interno para modificar stock de depósito.
+        ///
+        /// Verifica que el usuario sea vendedor y que el stock sea válido.
+        ///
+        /// Actualiza el depósito y persiste cambios.
+        ///
+        /// # Parámetros
+        /// - `id_vendedor`: Cuenta del vendedor.
+        /// - `id_producto`: ID del producto.
+        /// - `stock`: Nuevo stock.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si la modificación fue exitosa.
+        /// - `Err(ErrorMarketplace::ProductoNoExiste)` si no existe el depósito.
+        /// - `Err(ErrorMarketplace::RolInvalido)` si el usuario no es vendedor.
+        /// - `Err(ErrorMarketplace::StockInvalido)` si el stock no es válido.
         fn _modificar_stock_deposito(
             &mut self,
             id_vendedor: AccountId,
@@ -700,6 +1089,19 @@ mod market_place {
         }
 
         //Helper para inicializar un depósito para un vendedor.
+        /// Inicializa un depósito para un vendedor y producto con un stock dado.
+        ///
+        /// Valida rol vendedor y stock válido.
+        ///
+        /// # Parámetros
+        /// - `id_vendedor`: Cuenta del vendedor.
+        /// - `id_producto`: ID del producto.
+        /// - `stock`: Stock inicial.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si la inicialización fue exitosa.
+        /// - `Err(ErrorMarketplace::RolInvalido)` si el usuario no es vendedor.
+        /// - `Err(ErrorMarketplace::StockInvalido)` si el stock no es válido.
         fn inicializar_deposito(
             &mut self,
             id_vendedor: AccountId,
@@ -719,6 +1121,17 @@ mod market_place {
             Ok(())
         }
 
+        /// Registra un nuevo usuario con un nombre de usuario y rol dado.
+        ///
+        /// El `caller` es la cuenta que llama a esta función y será usada como ID del usuario.
+        ///
+        /// # Parámetros
+        /// - `username`: Nombre del usuario.
+        /// - `rol`: Rol asignado al usuario.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si el usuario fue registrado correctamente.
+        /// - `Err(ErrorMarketplace::UsuarioYaRegistrado)` si el usuario ya existe.
         #[ink(message)]
         pub fn registrar_usuario(
             &mut self,
@@ -731,6 +1144,16 @@ mod market_place {
             Ok(()) //no devuelve nada porque solo inserta en el map de sistema
         }
 
+        /// Helper interno para registrar un usuario.
+        ///
+        /// # Parámetros
+        /// - `username`: Nombre del usuario.
+        /// - `rol`: Rol asignado.
+        /// - `id`: Cuenta del usuario.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si el usuario fue registrado correctamente.
+        /// - `Err(ErrorMarketplace::UsuarioYaRegistrado)` si ya existe un usuario con el mismo ID.
         fn _registrar_usuario(
             &mut self,
             username: String,
@@ -748,6 +1171,14 @@ mod market_place {
             Ok(())
         }
 
+        /// Modifica el rol del usuario que llama a esta función.
+        ///
+        /// # Parámetros
+        /// - `nuevo_rol`: Nuevo rol a asignar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si el rol fue modificado exitosamente.
+        /// - `Err(ErrorMarketplace)` si el usuario no existe o si el nuevo rol es igual al actual.
         #[ink(message)]
         pub fn modificar_rol(&mut self, nuevo_rol: Rol) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
@@ -755,6 +1186,16 @@ mod market_place {
             Ok(())
         }
 
+        /// Helper interno para modificar el rol de un usuario.
+        ///
+        /// # Parámetros
+        /// - `id_usuario`: Cuenta del usuario.
+        /// - `nuevo_rol`: Nuevo rol a asignar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si el rol fue modificado exitosamente.
+        /// - `Err(ErrorMarketplace::UsuarioNoExiste)` si el usuario no existe.
+        /// - `Err(ErrorMarketplace::RolYaAsignado)` si el nuevo rol es igual al actual.
         fn _modificar_rol(
             &mut self,
             id_usuario: AccountId,
@@ -771,6 +1212,18 @@ mod market_place {
         }
 
         //Publicar producto
+        /// Crea una nueva publicación para un producto dado, con stock y precio.
+        ///
+        /// El caller debe ser un vendedor registrado.
+        ///
+        /// # Parámetros
+        /// - `id_producto`: ID del producto a publicar.
+        /// - `stock_a_vender`: Cantidad de producto a vender en esta publicación.
+        /// - `precio`: Precio unitario.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si la publicación fue creada exitosamente.
+        /// - `Err(ErrorMarketplace)` en caso de errores de validación o permisos.
         #[ink(message)]
         pub fn crear_publicacion(
             &mut self,
@@ -789,7 +1242,19 @@ mod market_place {
             Ok(())
         }
 
-        //Esto es lo que se testea
+        /// Helper interno para crear una publicación.
+        ///
+        /// Realiza validaciones de existencia de usuario, rol, stock y precio.
+        ///
+        /// # Parámetros
+        /// - `id_producto`: ID del producto.
+        /// - `id_vendedor`: Cuenta del vendedor.
+        /// - `stock_a_vender`: Cantidad a vender.
+        /// - `precio`: Precio unitario.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si la publicación fue creada exitosamente.
+        /// - `Err(ErrorMarketplace)` si ocurre algún error en las validaciones o inserciones.
         fn _crear_publicacion(
             &mut self,
             nombre_producto: String,
@@ -831,7 +1296,18 @@ mod market_place {
             Ok(())
         }
 
-        //Ordenar producto
+        /// Crea una orden de compra para una publicación con la cantidad y monto dado.
+        ///
+        /// El caller debe ser un comprador registrado.
+        ///
+        /// # Parámetros
+        /// - `id_publicacion`: ID de la publicación a comprar.
+        /// - `cant_producto`: Cantidad de producto a comprar.
+        /// - `monto_dado`: Monto que el comprador entrega para pagar.
+        ///
+        /// # Retorna
+        /// - `Ok(())` si la orden fue creada correctamente.
+        /// - `Err(ErrorMarketplace)` si hay errores en validaciones o permisos.
         #[ink(message)]
         pub fn crear_orden(
             &mut self,
@@ -896,6 +1372,10 @@ mod market_place {
             Ok(())
         }
 
+        #[ink(message)]
+        pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
+            let caller = self.env().caller();
+            // Busca la orden con el ID dado dentro del Mapping ordenes
         // Busca la orden con el ID dado dentro del Mapping ordenes
         /// Función privada que marca una orden como enviada.
         ///
