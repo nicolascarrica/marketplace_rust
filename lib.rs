@@ -3,7 +3,6 @@
 #[ink::contract]
 mod market_place {
     // use core::char::CharTryFromError;
-    //use std::vec;
 
     use ink::prelude::string::String;
     // use ink::prelude::vec::Vec;
