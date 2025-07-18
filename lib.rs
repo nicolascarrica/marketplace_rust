@@ -612,6 +612,9 @@ mod market_place {
                 .get(&(id_vendedor, id_producto))
                 .ok_or(ErrorMarketplace::ProductoNoExiste)?;
             deposito.actualizar_stock(nuevo_stock)?;
+
+            //se debe volver a insertar para poder actualizar el stock
+            self.stock_general.insert((id_vendedor, id_producto), &deposito); 
             Ok(())
         }
         ///Funcion que modifica el stock de un depósito de un vendedor.
@@ -892,7 +895,7 @@ mod market_place {
     /// The below code is technically just normal Rust code.
     #[cfg(test)]
     mod tests {
-        use ink::{env::test, primitives::AccountId};
+        use ink::{env::test, primitives::AccountId, xcm::VersionedNetworkId};
 
         use crate::market_place::{
             Categoria, ErrorMarketplace, ErrorOrden, EstadoOrden, MarketPlace, Orden, Producto,
@@ -1148,7 +1151,147 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::IDPublicacionEnUso));
         }
 
+        // Helper de insertar producto en catalogo
+        #[ink::test]
+        fn insertar_producto_en_catalogo_ok() {
+            let mut contrato= nuevo_contrato();
+
+            let producto=Producto::new(
+                1,
+                "Celular".to_string(),
+                "Descripcion del celular".to_string(),
+                Categoria::Tecnologia,
+            );
+
+            let res = contrato.insertar_producto_en_catalogo(producto.clone());
+            assert!(res.is_ok());
+
+            match contrato.productos.get(&1) {
+                Some(producto_guardado) => {
+                    assert_eq!(producto_guardado.id_producto, 1);
+                    assert_eq!(producto_guardado.nombre, "Celular");
+                    assert_eq!(producto_guardado.descripcion, "Descripcion del celular");
+                    assert_eq!(producto_guardado.categoria, Categoria::Tecnologia);
+                },
+                None => (),
+                
+            } 
+        }
+
+        #[ink::test]
+        fn insertar_producto_en_catalogo_producto_ya_existe() {
+            let mut contrato = nuevo_contrato();
+            let producto=Producto::new(
+                1,
+                "Comida".to_string(),
+                "Descripcion de la comida".to_string(),
+                Categoria::Alimentos,
+            );
+
+            assert!(contrato.insertar_producto_en_catalogo(producto.clone()).is_ok());
+            let res = contrato.insertar_producto_en_catalogo(producto);
+            assert_eq!(res, Err(ErrorMarketplace::IDProductoEnUso));
+        }
+
+
+
         //Helper de actualizar stock de deposito
+        #[ink::test]
+        fn actualizar_stock_producto_ok() {
+            let mut contrato = contract_dummy();
+            let vendedor = account(2);
+            let id_producto = 1;
+            let stock_inicial = 100;
+            let stock_a_vender = 30;
+
+            let deposito = Deposito::new(id_producto, vendedor, stock_inicial);
+            // Simular el estado inicial
+            contrato
+                .stock_general
+                .insert((vendedor, id_producto),&deposito);
+
+            // Ejecutar función
+            let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
+            // Verificar que fue exitoso
+            assert_eq!(result, Ok(()));
+
+            // Verificar que el nuevo stock es correcto
+            match contrato.stock_general.get(&(vendedor, id_producto)) {
+                Some(deposito) => {
+                    assert_eq!(deposito.stock, (stock_inicial - stock_a_vender));
+                },
+                None => (),
+            } 
+        }
+
+        #[ink::test]
+        fn actualizar_stock_producto_stock_insuficiente() {
+            let mut contrato = contract_dummy();
+            let vendedor = account(2);
+            let id_producto = 1;
+            let stock_inicial = 10;
+            let stock_a_vender = 20;
+
+            let deposito = Deposito::new(id_producto, vendedor, stock_inicial);
+            // Simular el estado inicial
+            contrato
+                .stock_general
+                .insert((vendedor, id_producto), &deposito);
+
+            let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
+
+            assert_eq!(result, Err(ErrorMarketplace::StockDepositoInsuficiente));
+        }
+
+        #[ink::test]
+        fn actualizar_stock_producto_producto_no_existe() {
+            let mut contrato = contract_dummy();
+            let vendedor = account(2);
+            let id_producto = 45;
+            let stock_a_vender = 5;
+
+            // No se inserta el producto en el depósito
+
+            let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
+
+            assert_eq!(result, Err(ErrorMarketplace::ProductoNoExiste));
+        }
+
+        #[ink::test]
+        fn actualizar_stock_producto_falla_validacion_de_stock() {
+            let mut contrato = contract_dummy();
+            let vendedor = account(2);
+            let id_producto = 1;
+            let stock_inicial = 50;
+            let stock_a_vender = 999; //valor invalido para la logica
+
+            let deposito = Deposito::new(id_producto, vendedor, stock_inicial);
+
+            contrato
+                .stock_general
+                .insert((vendedor, id_producto), &deposito);
+
+            let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
+
+            assert_eq!(result, Err(ErrorMarketplace::StockDepositoInsuficiente)); // O el error que uses en validar
+        }
+
+        //Helper de vendedor tiene deposito
+        #[ink::test]
+        fn vendedor_tiene_deposito_para_producto_ambos_v_y_f() {
+            let mut contrato = nuevo_contrato();
+            let vendedor = account(2);
+            let id_producto = 1;
+
+            // No se tiene deposito
+            assert_eq!(contrato.vendedor_tiene_deposito_para_producto(vendedor, id_producto), false);
+
+            let deposito = Deposito::new(id_producto, vendedor, 100);
+            contrato.stock_general.insert((vendedor, id_producto), &deposito);
+
+            // Ya se hizo el deposito
+            assert_eq!(contrato.vendedor_tiene_deposito_para_producto(vendedor, id_producto), true);
+        }
 
 
 
