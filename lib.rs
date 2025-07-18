@@ -10,9 +10,8 @@ mod market_place {
     //use ink_e2e::sr25519::PublicKey;
     //use ink_e2e::subxt_signer::bip39::serde::de::value::Error;
 
-
     /// Representa los roles posibles que puede tener un usuario dentro del marketplace.
-    /// 
+    ///
     /// # Variantes
     /// - `Comprador`: Solo puede comprar productos
     /// - `Vendedor`: Solo puede vender productos
@@ -35,7 +34,7 @@ mod market_place {
     }
 
     /// Categorías disponibles para clasificar productos en el marketplace.
-    /// 
+    ///
     /// # Variantes
     /// - `Tecnologia`: Dispositivos electrónicos, software, etc.
     /// - `Indumentaria`: Ropa, accesorios, calzado
@@ -61,7 +60,7 @@ mod market_place {
     }
 
     /// Estados posibles que puede tener una orden de compra a lo largo de su ciclo de vida.
-    /// 
+    ///
     /// # Variantes
     /// - `Pendiente`: Orden creada, esperando procesamiento del vendedor
     /// - `Enviado`: Vendedor ha enviado el producto
@@ -85,10 +84,10 @@ mod market_place {
     }
 
     /// ## Errores del Marketplace
-    /// 
+    ///
     /// Define todos los posibles errores que pueden ocurrir durante las operaciones del marketplace.
     /// Cada error incluye una descripción específica del problema encontrado.
-    
+
     //Enum Errores
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
@@ -123,13 +122,13 @@ mod market_place {
     // Structs
 
     /// Representa a un usuario registrado en el marketplace.
-    /// 
+    ///
     /// # Campos
     /// - `username`: Nombre de usuario único
     /// - `rol`: Rol del usuario (Comprador, Vendedor, Ambos)
     /// - `id`: Identificador único de la cuenta (AccountId)
     /// - `verificacion`: Estado de verificación del usuario
-    /// 
+    ///
     #[derive(
         Debug,
         Clone,
@@ -164,7 +163,7 @@ mod market_place {
                 verificacion: true,
             }
         }
-        
+
         // Helper validar rol vendedor
         /// Valida que el rol del usuario permita actuar como vendedor.
         ///
@@ -201,14 +200,14 @@ mod market_place {
     }
 
     /// Representa un producto en el marketplace.
-    /// 
+    ///
     /// # Campos
     /// - `id`: Identificador único del producto
     /// - `nombre`: Nombre del producto
     /// - `descripcion`: Descripción detallada del producto
     /// - `precio`: Precio del producto en la moneda nativa
     /// - `categoria`: Categoría a la que pertenece el producto
-    /// 
+    ///
     #[derive(
         Debug,
         Clone,
@@ -226,7 +225,6 @@ mod market_place {
         categoria: Categoria,
     }
     impl Producto {
-
         /// Crea una nueva instancia de un producto.
         ///
         /// # Parámetros
@@ -277,12 +275,11 @@ mod market_place {
         ///
         /// # Retorna
         /// Una nueva cadena con el nombre formateado.
-        
+
         fn normalizar_nombre_producto(nombre: &String) -> String {
             // Normaliza el nombre del producto a minúsculas y elimina espacios extra
             nombre.to_lowercase().trim().to_string()
         }
-
 
         // Helper validar descripcion de producto
         /// Valida si la descripción del producto es adecuada.
@@ -300,7 +297,7 @@ mod market_place {
             Ok(())
         }
         //Helper validar stock de producto
-         /// Valida si el stock de un producto es mayor a cero.
+        /// Valida si el stock de un producto es mayor a cero.
         ///
         /// # Parámetros
         /// - `stock`: Cantidad de stock a validar.
@@ -317,7 +314,7 @@ mod market_place {
     }
 
     /// Representa una publicación de producto en el marketplace.
-    /// 
+    ///
     /// # Campos
     /// - `id`: Identificador único de la publicación
     /// - `producto_id`: ID del producto publicado
@@ -341,7 +338,7 @@ mod market_place {
         precio: u128,
         stock_a_vender: u32,
     }
-    
+
     /// Crea una nueva instancia de una publicación.
     ///
     /// # Parámetros
@@ -401,7 +398,6 @@ mod market_place {
         }
     }
 
-    
     /// Representa una orden de compra en el marketplace.
     ///
     /// Cada orden vincula a un comprador con un producto publicado por un vendedor.
@@ -432,38 +428,6 @@ mod market_place {
         cant_producto: u16, //cantidad de producto que se ordena
         estado: EstadoOrden,
         total: u128,
-    }
-    impl Orden {
-        /// Crea una nueva orden de compra con estado inicial `Pendiente`.
-        ///
-        /// # Parámetros
-        /// - `id`: Identificador único para la orden.
-        /// - `comprador`: `AccountId` del usuario que realiza la compra.
-        /// - `vendedor`: `AccountId` del vendedor que publicó el producto.
-        /// - `id_producto`: ID del producto solicitado.
-        /// - `cant_producto`: Cantidad del producto a comprar.
-        /// - `total`: Monto total de la orden (precio * cantidad).
-        ///
-        /// # Retorna
-        /// Una nueva instancia de `Orden` con estado `EstadoOrden::Pendiente`.
-        pub fn new(
-            id: u32,
-            comprador: AccountId,
-            vendedor: AccountId,
-            id_producto: u32,
-            cant_producto: u16,
-            total: u128,
-        ) -> Self {
-            Self {
-                id,
-                comprador,
-                vendedor,
-                id_producto,
-                cant_producto,
-                total,
-                estado: EstadoOrden::Pendiente,
-            }
-        }
     }
 
     /// Representa el depósito de un vendedor para un producto específico.
@@ -540,8 +504,20 @@ mod market_place {
         //aca iria lo de reputacion, creo
     }
 
-
     impl Orden {
+        /// Crea una nueva orden de compra con estado inicial `Pendiente`.
+        ///
+        /// # Parámetros
+        /// - `id`: Identificador único para la orden.
+        /// - `comprador`: `AccountId` del usuario que realiza la compra.
+        /// - `vendedor`: `AccountId` del vendedor que publicó el producto.
+        /// - `id_producto`: ID del producto solicitado.
+        /// - `cant_producto`: Cantidad del producto a comprar.
+        /// - `total`: Monto total de la orden (precio * cantidad).
+        ///
+        /// # Retorna
+        /// Una nueva instancia de `Orden` con estado `EstadoOrden::Pendiente`.
+        ///
         pub fn new(
             id: u32,
             comprador: AccountId,
@@ -629,7 +605,6 @@ mod market_place {
     }
 
     impl MarketPlace {
-
         #[ink(constructor)]
         /// Inicializa un nuevo contrato `MarketPlace` con todos los mappings vacíos y contadores en cero.
         pub fn new() -> Self {
@@ -644,7 +619,7 @@ mod market_place {
                 contador_productos: 0,
             }
         }
-        
+
         /// Registra un nuevo producto para el vendedor que llama a la función.
         ///
         /// Valida los datos, normaliza el nombre, crea el producto si no existe,
@@ -1016,8 +991,8 @@ mod market_place {
                 .stock_general
                 .get(&(id_vendedor, id_producto))
                 .ok_or(ErrorMarketplace::ProductoNoExiste)?;
-            
-            deposito.actualizar_stock(nuevo_stock); 
+
+            deposito.actualizar_stock(nuevo_stock);
 
             //se debe volver a insertar para poder actualizar el stock
             self.stock_general
@@ -1073,7 +1048,7 @@ mod market_place {
             // Verificar que el usuario sea vendedor
             self.verificar_rol_vendedor(id_vendedor)?;
             // Verificar que el stock sea válido
-            Producto::validar_stock_producto(&stock)?; // Preguntar al profesor u32 no tiene signo así que esta validación es inútil
+            Producto::validar_stock_producto(&stock)?;
 
             // Obtener el depósito del vendedor
             let mut deposito = self
@@ -1111,10 +1086,9 @@ mod market_place {
             // Verificar que el usuario sea vendedor
             self.verificar_rol_vendedor(id_vendedor)?;
             // Verificar que el stock sea válido
-            Producto::validar_stock_producto(&stock)?; // Preguntar al profesor u32 no tiene signo así que esta validación es inútil
-                                                       // Crear un nuevo depósito
+            Producto::validar_stock_producto(&stock)?;
+            // Crear un nuevo depósito
             let deposito = Deposito::new(id_producto, id_vendedor, stock);
-
             // Insertar el depósito en el mapping
             self.stock_general
                 .insert((id_vendedor, id_producto), &deposito);
@@ -1138,10 +1112,9 @@ mod market_place {
             username: String,
             rol: Rol,
         ) -> Result<(), ErrorMarketplace> {
-            //deberiamos ver como manejar el error
-            let caller = self.env().caller(); //id
+            let caller = self.env().caller();
             self._registrar_usuario(username, rol, caller)?;
-            Ok(()) //no devuelve nada porque solo inserta en el map de sistema
+            Ok(())
         }
 
         /// Helper interno para registrar un usuario.
@@ -1233,12 +1206,7 @@ mod market_place {
         ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
             //llamar helper de crear publicacion
-            self._crear_publicacion(
-                nombre_producto,
-                caller, // id del vendedor
-                stock_a_vender,
-                precio,
-            )?;
+            self._crear_publicacion(nombre_producto, caller, stock_a_vender, precio)?;
             Ok(())
         }
 
@@ -1266,9 +1234,11 @@ mod market_place {
             self.verificar_rol_vendedor(id_vendedor)?;
             //Validar precio
             Publicacion::validar_precio(&precio)?;
-            //normalizar nombre de producto y validar que exista en el catalogo
+            //normalizar nombre de producto
             let nombre_producto_normalizado =
                 Producto::normalizar_nombre_producto(&nombre_producto);
+
+            // validar que exista en el catalogo
             let id_producto = self
                 .buscar_producto_por_nombre(&nombre_producto_normalizado)
                 .map_err(|_| ErrorMarketplace::ProductoNoExiste)?;
@@ -1344,8 +1314,6 @@ mod market_place {
                 Some(valor) => valor,
                 None => return Err(ErrorMarketplace::Overflow),
             };
-
-            //buscar documentacion de ink para calculos aritmeticos
             // Verificar que el monto dado sea suficiente para cubrir el total de la orden
             if monto_dado < tot_orden {
                 return Err(ErrorMarketplace::MontoInsuficiente);
@@ -1372,10 +1340,6 @@ mod market_place {
             Ok(())
         }
 
-        #[ink(message)]
-        pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
-            let caller = self.env().caller();
-            // Busca la orden con el ID dado dentro del Mapping ordenes
         // Busca la orden con el ID dado dentro del Mapping ordenes
         /// Función privada que marca una orden como enviada.
         ///
@@ -1491,11 +1455,10 @@ mod market_place {
     /// The below code is technically just normal Rust code.
     #[cfg(test)]
     mod tests {
-        use ink::{primitives::AccountId};
+        use ink::primitives::AccountId;
 
         use crate::market_place::{
-            Categoria, ErrorMarketplace, EstadoOrden, MarketPlace, Orden, Producto,
-            Rol, Usuario,
+            Categoria, ErrorMarketplace, EstadoOrden, MarketPlace, Orden, Producto, Rol, Usuario,
         };
 
         /// Imports all the definitions from the outer scope so we can use them here.
@@ -1655,7 +1618,7 @@ mod market_place {
             let res = contrato._marcar_orden_como_recibida(account(3), 1);
             assert_eq!(res, Err(ErrorMarketplace::NoEsComprador));
         }
-        
+
         #[ink::test]
         fn test_marcar_orden_como_recibida_estado_invalido() {
             let mut contrato = contract_dummy();
@@ -1667,7 +1630,6 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
         }
 
-     
         /// Test MarketPlace
         #[ink::test]
         fn registrar_usuario_ok() {
@@ -1952,11 +1914,11 @@ mod market_place {
             let stock_a_vender = 10;
             let precio = 1000;
 
-            let result = contrato._crear_publicacion(nombre_producto, vendedor, stock_a_vender, precio);
+            let result =
+                contrato._crear_publicacion(nombre_producto, vendedor, stock_a_vender, precio);
 
             assert_eq!(result, Err(ErrorMarketplace::ProductoNoExiste));
         }
-
 
         /// Tests Marketplace Helpers
         #[ink::test]
@@ -2553,7 +2515,6 @@ mod market_place {
             assert_eq!(result, Err(ErrorMarketplace::Overflow));
         }
     }
-
 }
 
 /*
