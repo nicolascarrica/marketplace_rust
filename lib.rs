@@ -3,7 +3,6 @@
 #[ink::contract]
 mod market_place {
     // use core::char::CharTryFromError;
-    use std::vec;
 
     use ink::prelude::string::String;
     // use ink::prelude::vec::Vec;
@@ -85,31 +84,6 @@ mod market_place {
         Cancelada,
     }
 
-
-    #[derive(
-        Debug,
-        Clone,
-        PartialEq,
-        Eq,
-        ink::scale::Encode,
-        ink::scale::Decode,
-        ink::storage::traits::StorageLayout,
-    )]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub enum ErrorOrden {
-        NoEsVendedor,
-        NoEsComprador,
-        EstadoInvalido,
-        NoAutorizado,
-        UsuarioYaRegistrado,
-        UsuarioNoExiste,
-        RolInvalido,
-        ProductoNoExiste,
-        StockInsuficiente,
-        OrdenNoExiste,
-        OrdenCancelada,
-    }
-
     /// ## Errores del Marketplace
     /// 
     /// Define todos los posibles errores que pueden ocurrir durante las operaciones del marketplace.
@@ -129,6 +103,7 @@ mod market_place {
         PublicacionNoExiste,
         StockInsuficiente,
         OrdenNoExiste,
+        OrdenCancelada,
         NoEsComprador,
         NoEsVendedor,
         EstadoInvalido,
@@ -142,6 +117,8 @@ mod market_place {
         MontoInsuficiente,
         StockDepositoInsuficiente,
         ProductoYaPoseeDeposito,
+        Overflow, // Error para manejar overflow en cálculos aritméticos
+        DepositoNoEncontrado,
     }
     // Structs
 
@@ -530,16 +507,8 @@ mod market_place {
             }
         }
 
-        /// Actualiza el stock disponible en el depósito.
-        ///
-        /// # Parámetros
-        /// - `stock`: Nueva cantidad de unidades disponibles.
-        ///
-        /// # Retorna
-        /// - `Ok(())` si la actualización fue exitosa.
-        pub fn actualizar_stock(&mut self, stock: u32) -> Result<(), ErrorMarketplace> {
+        pub fn actualizar_stock(&mut self, stock: u32) {
             self.stock = stock;
-            Ok(())
         }
     }
 
@@ -569,6 +538,94 @@ mod market_place {
         contador_publicacion: u32,
         contador_productos: u32,
         //aca iria lo de reputacion, creo
+    }
+
+
+    impl Orden {
+        pub fn new(
+            id: u32,
+            comprador: AccountId,
+            vendedor: AccountId,
+            id_producto: u32,
+            cant_producto: u16,
+            total: u128,
+        ) -> Self {
+            Self {
+                id,
+                comprador,
+                vendedor,
+                id_producto,
+                cant_producto,
+                total,
+                estado: EstadoOrden::Pendiente,
+            }
+        }
+
+        /// Marca la orden como enviada.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable a la orden que se quiere modificar.
+        /// - 'caller: AccountId': cuenta que está intentando cambiar el estado (debe ser el vendedor).
+        ///
+        /// # Comportamiento
+        /// 1. Verifica que el 'caller' sea el vendedor asignado a esta orden.
+        /// 2. Verifica que la orden no esté en estado cancelado.
+        /// 3. Si las validaciones pasan, cambia el estado de la orden a 'Enviado'.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la operación se realizó correctamente.
+        /// - 'Err(ErrorMarketplace::NoEsVendedor)' si el 'caller' no es el vendedor.
+        /// - 'ErrorMarketplace::OrdenCancelada' si el estado de la orden está como cancelada.
+        fn marcar_enviada(&mut self, caller: AccountId) -> Result<(), ErrorMarketplace> {
+            //validar que quien llame sea vendedor
+            if caller != self.vendedor {
+                return Err(ErrorMarketplace::NoEsVendedor);
+            }
+            //validar que la orden no este cancelada
+            if self.estado == EstadoOrden::Cancelada {
+                return Err(ErrorMarketplace::OrdenCancelada);
+            }
+            //como la orden se pone por default en estado "Pendiente", no necesito preguntar si esta pendiente para cambiarla(?
+
+            //cambiar el estado a "Enviado"
+            self.estado = EstadoOrden::Enviado;
+            Ok(())
+        }
+
+        /// Marca la orden como recibida.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable a la orden que se quiere modificar.
+        /// - 'caller: AccountId': cuenta que está intentando cambiar el estado (debe ser el comprador).
+        ///
+        /// # Comportamiento
+        /// 1. Verifica que el 'caller' sea el comprador asignado a esta orden.
+        /// 2. Verifica que la orden no esté cancelada.
+        /// 3. Verifica que la orden esté en estado 'Enviado' (sólo puede marcarse como recibida si ya fue enviada).
+        /// 4. Si las validaciones pasan, cambia el estado de la orden a 'Recibido'.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la operación se realizó correctamente.
+        /// - 'Err(ErrorMarketplace::NoEsComprador)' si el 'caller' no es el comprador.
+        /// - 'Err(ErrorMarketplace::OrdenCancelada)' si el estado de la orden está como cancelada.
+        /// - 'Err(ErrorMarketplace::EstadoInvalido)' si la orden no está en estado 'Enviado'.
+        fn marcar_recibida(&mut self, caller: AccountId) -> Result<(), ErrorMarketplace> {
+            //validar que quien llama sea el comprador
+            if caller != self.comprador {
+                return Err(ErrorMarketplace::NoEsComprador);
+            }
+            //validar que la orden no este cancelada
+            if self.estado == EstadoOrden::Cancelada {
+                return Err(ErrorMarketplace::OrdenCancelada);
+            }
+            //solo se marca como recibida si ya fue enviada
+            if self.estado != EstadoOrden::Enviado {
+                return Err(ErrorMarketplace::EstadoInvalido);
+            }
+            //cambiar el estado a "Recibido"
+            self.estado = EstadoOrden::Recibido;
+            Ok(())
+        }
     }
 
     impl MarketPlace {
@@ -742,7 +799,7 @@ mod market_place {
         ) -> Result<Publicacion, ErrorMarketplace> {
             self.publicaciones
                 .get(&id_publicacion)
-                .ok_or_else(|| ErrorMarketplace::PublicacionNoExiste)
+                .ok_or(ErrorMarketplace::PublicacionNoExiste)
         }
 
         //Helper para verificar si un producto existe y no tiene deposito para el vendedor
@@ -893,7 +950,7 @@ mod market_place {
         ) -> Result<u32, ErrorMarketplace> {
             self.stock_general
                 .get(&(id_vendedor, id_producto))
-                .map_or(Err(ErrorMarketplace::ProductoNoExiste), |deposito| {
+                .map_or(Err(ErrorMarketplace::DepositoNoEncontrado), |deposito| {
                     Ok(deposito.stock)
                 })
         }
@@ -917,6 +974,7 @@ mod market_place {
             id_producto: u32,
             stock_a_vender: u32,
         ) -> Result<(), ErrorMarketplace> {
+            // Verificar que el depósito exista
             let stock_actual = self.obtener_stock_deposito(id_vendedor, id_producto)?;
             if stock_actual < stock_a_vender {
                 return Err(ErrorMarketplace::StockDepositoInsuficiente);
@@ -949,12 +1007,21 @@ mod market_place {
             // Verificar que el stock a vender no exceda el stock actual
             self.validar_stock_deposito(id_vendedor, id_producto, stock_a_vender)?;
             // Actualizar el stock en el depósito
-            let nuevo_stock: u32 = stock_actual - stock_a_vender;
+
+            let nuevo_stock = stock_actual
+                .checked_sub(stock_a_vender)
+                .ok_or(ErrorMarketplace::StockInsuficiente)?;
+
             let mut deposito = self
                 .stock_general
                 .get(&(id_vendedor, id_producto))
                 .ok_or(ErrorMarketplace::ProductoNoExiste)?;
-            deposito.actualizar_stock(nuevo_stock)?;
+            
+            deposito.actualizar_stock(nuevo_stock); 
+
+            //se debe volver a insertar para poder actualizar el stock
+            self.stock_general
+                .insert((id_vendedor, id_producto), &deposito);
             Ok(())
         }
 
@@ -1014,7 +1081,7 @@ mod market_place {
                 .get(&(id_vendedor, id_producto))
                 .ok_or(ErrorMarketplace::ProductoNoExiste)?;
             // Actualizar el stock del depósito
-            deposito.actualizar_stock(stock)?;
+            deposito.actualizar_stock(stock);
             // Guardar el depósito actualizado en el mapping
             self.stock_general
                 .insert((id_vendedor, id_producto), &deposito);
@@ -1160,14 +1227,14 @@ mod market_place {
         #[ink(message)]
         pub fn crear_publicacion(
             &mut self,
-            id_producto: u32,
+            nombre_producto: String,
             stock_a_vender: u32,
             precio: u128,
         ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
             //llamar helper de crear publicacion
             self._crear_publicacion(
-                id_producto,
+                nombre_producto,
                 caller, // id del vendedor
                 stock_a_vender,
                 precio,
@@ -1190,7 +1257,7 @@ mod market_place {
         /// - `Err(ErrorMarketplace)` si ocurre algún error en las validaciones o inserciones.
         fn _crear_publicacion(
             &mut self,
-            id_producto: u32,
+            nombre_producto: String,
             id_vendedor: AccountId,
             stock_a_vender: u32,
             precio: u128,
@@ -1199,7 +1266,14 @@ mod market_place {
             self.verificar_rol_vendedor(id_vendedor)?;
             //Validar precio
             Publicacion::validar_precio(&precio)?;
-            //Validar stock para vender es menor o igual al stock total del deposito
+            //normalizar nombre de producto y validar que exista en el catalogo
+            let nombre_producto_normalizado =
+                Producto::normalizar_nombre_producto(&nombre_producto);
+            let id_producto = self
+                .buscar_producto_por_nombre(&nombre_producto_normalizado)
+                .map_err(|_| ErrorMarketplace::ProductoNoExiste)?;
+
+            //Validar deposito si existe y si cant a vender es menor al stock total del deposito
             self.validar_stock_deposito(id_vendedor, id_producto, stock_a_vender)?;
 
             // Generamos un nuevo ID para la publicación
@@ -1243,12 +1317,22 @@ mod market_place {
         ) -> Result<(), ErrorMarketplace> {
             //monto dado es el monto que el comprador me da para pagar la orden
             let caller = self.env().caller();
+            self._crear_orden(caller, id_publicacion, cant_producto, monto_dado)?;
+            Ok(())
+        }
 
+        fn _crear_orden(
+            &mut self,
+            id_comprador: AccountId,
+            id_publicacion: u32,
+            cant_producto: u16,
+            monto_dado: u128,
+        ) -> Result<(), ErrorMarketplace> {
             // Verificar que el usuario exista
-            self.verificar_usuario_existe(caller)?;
+            self.verificar_usuario_existe(id_comprador)?;
 
             // Verificar que el usuario sea comprador
-            self.verificar_rol_comprador(caller)?;
+            self.verificar_rol_comprador(id_comprador)?;
 
             // Verificar que la publicación exista
             let publicacion = self.obtener_publicacion(id_publicacion)?;
@@ -1256,11 +1340,14 @@ mod market_place {
             // Verificar que el stock sea suficiente y asi poder crear la orden
             publicacion.verificar_stock(cant_producto as u32)?;
 
-            let tot_orden = publicacion.precio * cant_producto as u128;
+            let tot_orden = match publicacion.precio.checked_mul(cant_producto as u128) {
+                Some(valor) => valor,
+                None => return Err(ErrorMarketplace::Overflow),
+            };
 
             //buscar documentacion de ink para calculos aritmeticos
             // Verificar que el monto dado sea suficiente para cubrir el total de la orden
-            if monto_dado <= 0 || monto_dado < tot_orden {
+            if monto_dado < tot_orden {
                 return Err(ErrorMarketplace::MontoInsuficiente);
             }
 
@@ -1268,7 +1355,7 @@ mod market_place {
             let nueva_id = self.contador_ordenes;
             let orden = Orden::new(
                 nueva_id,
-                caller,
+                id_comprador,
                 publicacion.id_vendedor,
                 publicacion.id_producto,
                 cant_producto,
@@ -1276,88 +1363,127 @@ mod market_place {
             );
 
             self.ordenes.insert(nueva_id, &orden);
-            self.contador_ordenes += 1;
+
+            self.contador_ordenes = self
+                .contador_ordenes
+                .checked_add(1)
+                .ok_or(ErrorMarketplace::Overflow)?;
 
             Ok(())
         }
 
-        /// Marca una orden como enviada por el vendedor.
-        ///
-        /// El caller debe ser el vendedor asociado a la orden.
-        ///
-        /// # Parámetros
-        /// - `id_orden`: ID de la orden a marcar.
-        ///
-        /// # Retorna
-        /// - `Ok(())` si la orden fue marcada como enviada.
-        /// - `Err(ErrorOrden::NoEsVendedor)` si el caller no es el vendedor.
-        /// - `Err(ErrorOrden::OrdenCancelada)` si la orden está cancelada.
-        /// - `Err(ErrorOrden::OrdenNoExiste)` si la orden no existe.
         #[ink(message)]
         pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
             let caller = self.env().caller();
             // Busca la orden con el ID dado dentro del Mapping ordenes
+        // Busca la orden con el ID dado dentro del Mapping ordenes
+        /// Función privada que marca una orden como enviada.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'caller: AccountId': cuenta que realiza la acción (debe ser vendedor).
+        /// - 'id_orden: u32': identificador único de la orden a modificar.
+        ///
+        /// # Comportamiento
+        /// 1. Obtiene la orden con el 'id_orden'.
+        /// 2. Llama al método 'marcar_enviada' de la orden pasándole el `caller`.
+        /// 3. Si la operación es exitosa, actualiza la orden en el mapping.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la orden fue marcada como enviada correctamente.
+        /// - 'Err(ErrorMarketplace::OrdenNoExiste)' si no existe la orden con el 'id_orden' dado.
+        /// - Propaga otros errores que retorne 'marcar_enviada'.
+        fn _marcar_orden_como_enviada(
+            &mut self,
+            caller: AccountId,
+            id_orden: u32,
+        ) -> Result<(), ErrorMarketplace> {
             if let Some(mut orden) = self.ordenes.get(id_orden) {
-                //El método get de Mapping te devuelve una copia de la orden
-                //validar que quien llame sea vendedor
-                if caller != orden.vendedor {
-                    return Err(ErrorOrden::NoEsVendedor);
+                match orden.marcar_enviada(caller) {
+                    Ok(()) => {
+                        self.ordenes.insert(id_orden, &orden);
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
                 }
-                //validar que la orden no este cancelada
-                if orden.estado == EstadoOrden::Cancelada {
-                    return Err(ErrorOrden::OrdenCancelada);
-                }
-                //como la orden se pone por default en estado "Pendiente", no necesito preguntar si esta pendiente para cambiarla(?
-
-                //cambiar el estado de la orden a "Enviado"
-                orden.estado = EstadoOrden::Enviado;
-                // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
-                self.ordenes.insert(id_orden, &orden);
-                Ok(())
             } else {
-                Err(ErrorOrden::OrdenNoExiste)
+                Err(ErrorMarketplace::OrdenNoExiste)
             }
         }
 
-        /// Marca una orden como recibida por el comprador.
-        ///
-        /// El caller debe ser el comprador asociado a la orden.
+        /// Método público para marcar una orden como enviada.
         ///
         /// # Parámetros
-        /// - `id_orden`: ID de la orden a marcar.
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'id_orden: u32': identificador único de la orden a modificar.
+        ///
+        /// # Comportamiento
+        /// 1. Obtiene automáticamente el 'caller' de la llamada.
+        /// 2. Llama a la función privada '_marcar_orden_como_enviada'.
         ///
         /// # Retorna
-        /// - `Ok(())` si la orden fue marcada como recibida.
-        /// - `Err(ErrorOrden::NoEsComprador)` si el caller no es el comprador.
-        /// - `Err(ErrorOrden::OrdenCancelada)` si la orden está cancelada.
-        /// - `Err(ErrorOrden::EstadoInvalido)` si la orden no fue enviada aún.
-        /// - `Err(ErrorOrden::OrdenNoExiste)` si la orden no existe.
+        /// - 'Ok(())' si la orden fue marcada como enviada correctamente.
+        /// - Propaga errores desde '_marcar_orden_como_enviada'.
         #[ink(message)]
-        pub fn marcar_orden_como_recibida(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
+        pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
-            // Busca la orden con el ID dado dentro del Mapping ordenes
+            self._marcar_orden_como_enviada(caller, id_orden)
+        }
+
+        /// Función privada que marca una orden como recibida.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'caller: AccountId': cuenta que realiza la acción (debe ser comprador).
+        /// - 'id_orden: u32': identificador único de la orden a modificar.
+        ///
+        /// # Comportamiento
+        /// 1. Obtiene la orden con el 'id_orden'.
+        /// 2. Llama al método 'marcar_recibida' de la orden pasándole el 'caller'.
+        /// 3. Si la operación es exitosa, actualiza la orden en el mapping.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la orden fue marcada como recibida correctamente.
+        /// - 'Err(ErrorMarketplace::OrdenNoExiste)' si no existe la orden con el 'id_orden' dado.
+        /// - Propaga otros errores que retorne 'marcar_recibida'.
+        fn _marcar_orden_como_recibida(
+            &mut self,
+            caller: AccountId,
+            id_orden: u32,
+        ) -> Result<(), ErrorMarketplace> {
             if let Some(mut orden) = self.ordenes.get(id_orden) {
-                //El método get de Mapping te devuelve una copia de la orden
-                //validar que quien llame sea comprador
-                if caller != orden.comprador {
-                    return Err(ErrorOrden::NoEsComprador);
+                match orden.marcar_recibida(caller) {
+                    Ok(()) => {
+                        self.ordenes.insert(id_orden, &orden);
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
                 }
-                //validar que la orden no este cancelada
-                if orden.estado == EstadoOrden::Cancelada {
-                    return Err(ErrorOrden::OrdenCancelada);
-                }
-                // Solo puede marcarse como recibida si fue enviada previamente
-                if orden.estado != EstadoOrden::Enviado {
-                    return Err(ErrorOrden::EstadoInvalido);
-                }
-                //cambiar el estado de la orden a "Recibido"
-                orden.estado = EstadoOrden::Recibido;
-                // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
-                self.ordenes.insert(id_orden, &orden);
-                Ok(())
             } else {
-                Err(ErrorOrden::OrdenNoExiste)
+                Err(ErrorMarketplace::OrdenNoExiste)
             }
+        }
+
+        /// Método público para marcar una orden como recibida.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'id_orden: u32': identificador único de la orden a modificar.
+        ///
+        /// # Comportamiento
+        /// 1. Obtiene automáticamente el 'caller' de la llamada.
+        /// 2. Llama a la función privada '_marcar_orden_como_recibida'.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la orden fue marcada como recibida correctamente.
+        /// - Propaga errores desde '_marcar_orden_como_recibida'.
+        #[ink(message)]
+        pub fn marcar_orden_como_recibida(
+            &mut self,
+            id_orden: u32,
+        ) -> Result<(), ErrorMarketplace> {
+            let caller = self.env().caller();
+            self._marcar_orden_como_recibida(caller, id_orden)
         }
     }
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
@@ -1365,10 +1491,10 @@ mod market_place {
     /// The below code is technically just normal Rust code.
     #[cfg(test)]
     mod tests {
-        use ink::{env::test, primitives::AccountId};
+        use ink::{primitives::AccountId};
 
         use crate::market_place::{
-            Categoria, ErrorMarketplace, ErrorOrden, EstadoOrden, MarketPlace, Orden, Producto,
+            Categoria, ErrorMarketplace, EstadoOrden, MarketPlace, Orden, Producto,
             Rol, Usuario,
         };
 
@@ -1383,26 +1509,29 @@ mod market_place {
             MarketPlace::new()
         }
 
+        fn set_caller(caller: AccountId) {
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(caller);
+        }
+
         fn contract_dummy() -> MarketPlace {
             let mut contract = nuevo_contrato();
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(1));
+            set_caller(account(1));
             contract
                 .registrar_usuario("user1".to_string(), Rol::Comprador)
                 .ok();
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(2));
+            set_caller(account(2));
             contract
                 .registrar_usuario("user2".to_string(), Rol::Vendedor)
                 .ok();
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(3));
+            set_caller(account(3));
             contract
                 .registrar_usuario("user3".to_string(), Rol::Ambos)
                 .ok();
             contract
         }
-
         #[test]
         fn test_orden_enviada_ok() {
-            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
             let res = orden.marcar_enviada(account(2));
             assert_eq!(res, Ok(()));
             assert_eq!(orden.estado, EstadoOrden::Enviado);
@@ -1410,14 +1539,14 @@ mod market_place {
 
         #[test]
         fn test_orden_enviada_no_autorizado() {
-            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
             let res = orden.marcar_enviada(account(3));
-            assert_eq!(res, Err(ErrorOrden::NoEsVendedor));
+            assert_eq!(res, Err(ErrorMarketplace::NoEsVendedor));
         }
 
         #[test]
         fn test_orden_recibida_ok() {
-            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
             orden.estado = EstadoOrden::Enviado;
             let res = orden.marcar_recibida(account(1));
             assert_eq!(res, Ok(()));
@@ -1426,16 +1555,124 @@ mod market_place {
 
         #[test]
         fn test_marcar_recibida_estado_invalido() {
-            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
             let res = orden.marcar_recibida(account(1));
-            assert_eq!(res, Err(ErrorOrden::EstadoInvalido));
+            assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
         }
 
+        #[test]
+        fn test_orden_recibida_error() {
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Cancelada;
+            let res = orden.marcar_recibida(account(1));
+            assert_eq!(res, Err(ErrorMarketplace::OrdenCancelada));
+        }
+
+        #[test]
+        fn test_marcar_recibida_no_autorizado() {
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Enviado;
+            let res = orden.marcar_recibida(account(3)); // caller NO es el comprador
+            assert_eq!(res, Err(ErrorMarketplace::NoEsComprador));
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_enviada_ok() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_enviada(account(2), 1);
+            assert_eq!(res, Ok(()));
+
+            let actualizada = contrato.ordenes.get(1).unwrap();
+            assert_eq!(actualizada.estado, EstadoOrden::Enviado);
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_enviada_orden_no_existe() {
+            let mut contrato = contract_dummy();
+
+            let res = contrato._marcar_orden_como_enviada(account(2), 999);
+            assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_enviada_no_es_vendedor() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_enviada(account(3), 1);
+            assert_eq!(res, Err(ErrorMarketplace::NoEsVendedor));
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_enviada_cancelada() {
+            let mut contrato = contract_dummy();
+
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Cancelada;
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_enviada(account(2), 1);
+            assert_eq!(res, Err(ErrorMarketplace::OrdenCancelada));
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_recibida_ok() {
+            let mut contrato = contract_dummy();
+
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Enviado;
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_recibida(account(1), 1);
+            assert_eq!(res, Ok(()));
+
+            let actualizada = contrato.ordenes.get(1).unwrap();
+            assert_eq!(actualizada.estado, EstadoOrden::Recibido);
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_recibida_orden_no_existe() {
+            let mut contrato = contract_dummy();
+
+            let res = contrato._marcar_orden_como_recibida(account(1), 999);
+            assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_recibida_no_es_comprador() {
+            let mut contrato = contract_dummy();
+
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Enviado;
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_recibida(account(3), 1);
+            assert_eq!(res, Err(ErrorMarketplace::NoEsComprador));
+        }
+        
+        #[ink::test]
+        fn test_marcar_orden_como_recibida_estado_invalido() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 3, 300); // estado: Pendiente
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_recibida(account(1), 1);
+            assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
+        }
+
+     
         /// Test MarketPlace
         #[ink::test]
         fn registrar_usuario_ok() {
             let mut contrato = nuevo_contrato();
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(1));
+            set_caller(account(1));
             let account_id = account(1);
             let res = contrato._registrar_usuario("nico".to_string(), Rol::Comprador, account_id);
             assert_eq!(res, Ok(()));
@@ -1444,7 +1681,7 @@ mod market_place {
         #[ink::test]
         fn registrar_usuario_ya_existente_falla() {
             let mut contrato = contract_dummy();
-            test::set_caller::<ink::env::DefaultEnvironment>(account(1));
+            set_caller(account(1));
             let _ = contrato.registrar_usuario("nico".to_string(), Rol::Comprador);
             let res = contrato.registrar_usuario("nico".to_string(), Rol::Vendedor);
 
@@ -1454,7 +1691,7 @@ mod market_place {
         #[ink::test]
         fn modificar_rol_ok() {
             let mut contrato = nuevo_contrato();
-            test::set_caller::<ink::env::DefaultEnvironment>(account(2));
+            set_caller(account(2));
             let _ = contrato.registrar_usuario("ana".to_string(), Rol::Comprador);
             let id_vendedor = account(2);
             let res = contrato._modificar_rol(id_vendedor, Rol::Ambos);
@@ -1464,7 +1701,7 @@ mod market_place {
         #[ink::test]
         fn modificar_rol_igual_falla() {
             let mut contrato = nuevo_contrato();
-            test::set_caller::<ink::env::DefaultEnvironment>(account(3));
+            set_caller(account(3));
             let _ = contrato.registrar_usuario("luis".to_string(), Rol::Vendedor);
             let id_vendedor = account(3);
             let res = contrato._modificar_rol(id_vendedor, Rol::Vendedor);
@@ -1478,7 +1715,7 @@ mod market_place {
             let categoria: Categoria = Categoria::Tecnologia;
             let stock: u32 = 10;
             //Usamos el vendedor account(2) para registrar el producto
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(2));
+            set_caller(account(2));
             let id_vendedor = account(2);
             let res = contract._registrar_producto(
                 id_vendedor,
@@ -1488,7 +1725,239 @@ mod market_place {
                 stock,
             );
             assert_eq!(res, Ok(()));
+            if let Some(producto_guardado) = contract.productos.get(&1) {
+                assert_eq!(
+                    producto_guardado.nombre,
+                    Producto::normalizar_nombre_producto(&nombre)
+                );
+                assert_eq!(producto_guardado.descripcion, descripcion);
+                assert_eq!(producto_guardado.categoria, categoria);
+            } else {
+                // Si no se guardó el producto, fallamos el test
+                panic!("El producto no fue insertado en el catálogo");
+            }
         }
+        #[ink::test]
+        fn registrar_producto_existente_sin_deposito_inicializa_ok() {
+            let mut contract = contract_dummy();
+            let nombre = String::from("Producto existente");
+            let descripcion = String::from("Descripción");
+            let categoria = Categoria::Tecnologia;
+            let stock = 10;
+            let id_vendedor = account(2);
+
+            // Primero, registrar el producto con otro vendedor (account(3))
+            set_caller(account(3));
+            let _ = contract._registrar_producto(
+                account(3),
+                nombre.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                stock,
+            );
+
+            // Ahora, registrar el mismo producto con id_vendedor (account(2)), que NO tiene depósito aún
+            set_caller(id_vendedor);
+            let res = contract._registrar_producto(
+                id_vendedor,
+                nombre.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                stock,
+            );
+            assert_eq!(res, Ok(()));
+
+            // Verifica que el depósito fue inicializado para el vendedor actual
+            let id_producto = 1; // El primer producto registrado tiene id 1
+            let deposito = contract.stock_general.get(&(id_vendedor, id_producto));
+            assert!(deposito.is_some());
+            assert_eq!(deposito.unwrap().stock, stock);
+        }
+
+        #[ink::test]
+        fn buscar_producto_por_nombre_ok() {
+            let mut contract = nuevo_contrato();
+            // Insertar un producto en el mapping
+            let producto = Producto::new(
+                1,
+                "celular".to_string(),
+                "Un celular moderno".to_string(),
+                Categoria::Tecnologia,
+            );
+            contract.productos.insert(1, &producto);
+            contract.contador_productos = 1;
+
+            // Buscar por el nombre (sin normalizar, la función lo normaliza)
+            let res = contract.buscar_producto_por_nombre(&"Celular".to_string());
+            assert_eq!(res, Ok(1));
+        }
+        #[ink::test]
+        fn registrar_producto_existente_con_deposito_falla() {
+            let mut contract = contract_dummy();
+            let nombre = String::from("Producto existente");
+            let descripcion = String::from("Descripción");
+            let categoria = Categoria::Tecnologia;
+            let stock = 10;
+            let id_vendedor = account(2);
+
+            // Registrar el producto con el vendedor (account(2)), lo que también inicializa el depósito
+            set_caller(id_vendedor);
+            let prod1 = contract._registrar_producto(
+                id_vendedor,
+                nombre.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                stock,
+            );
+            assert_eq!(prod1, Ok(()));
+
+            // Intentar registrar el mismo producto nuevamente con el mismo vendedor
+            let res = contract._registrar_producto(
+                id_vendedor,
+                nombre.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                stock,
+            );
+            assert_eq!(res, Err(ErrorMarketplace::ProductoYaPoseeDeposito));
+        }
+        #[ink::test]
+        fn crear_publicacion_ok() {
+            let mut contract = contract_dummy();
+            let id_vendedor = account(2);
+            let id_producto = 1;
+            let stock_inicial = 10;
+            let stock_a_vender = 5;
+            let precio = 100;
+
+            // Simula depósito inicial para el vendedor y producto
+            let deposito = Deposito::new(id_producto, id_vendedor, stock_inicial);
+            contract
+                .stock_general
+                .insert((id_vendedor, id_producto), &deposito);
+            // Registramos el producto
+            let _ = contract._registrar_producto(
+                id_vendedor,
+                "Producto de prueba".to_string(),
+                "Descripción de prueba".to_string(),
+                Categoria::Tecnologia,
+                stock_inicial,
+            );
+
+            // Ejecuta la función
+            let res = contract._crear_publicacion(
+                "Producto de prueba".to_string(),
+                id_vendedor,
+                stock_a_vender,
+                precio,
+            );
+            assert_eq!(res, Ok(()));
+
+            // Verifica que la publicación fue insertada
+            if let Some(publicacion) = contract.publicaciones.get(&1) {
+                assert_eq!(publicacion.id_vendedor, id_vendedor);
+                assert_eq!(publicacion.id_producto, id_producto);
+                assert_eq!(publicacion.precio, precio);
+                assert_eq!(publicacion.stock_a_vender, stock_a_vender);
+            } else {
+                panic!("La publicación no fue insertada en el mapping");
+            }
+
+            // Verifica que el stock fue actualizado
+            if let Some(deposito_actualizado) =
+                contract.stock_general.get(&(id_vendedor, id_producto))
+            {
+                assert_eq!(deposito_actualizado.stock, stock_inicial - stock_a_vender);
+            } else {
+                panic!("El depósito no fue actualizado");
+            }
+        }
+
+        #[ink::test]
+        fn crear_publicacion_usuario_no_existe() {
+            let mut contract = contract_dummy();
+            let id_vendedor = account(99); // No existe
+            let nombre_producto = "Producto de prueba".to_string();
+            let stock_a_vender = 5;
+            let precio = 100;
+
+            let res =
+                contract._crear_publicacion(nombre_producto, id_vendedor, stock_a_vender, precio);
+            assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
+        }
+
+        #[ink::test]
+        fn crear_publicacion_rol_invalido() {
+            let mut contract = contract_dummy();
+            let id_vendedor = account(1); // Comprador, no vendedor
+            let nombre_producto = "Producto de prueba".to_string();
+            let stock_a_vender = 5;
+            let precio = 100;
+
+            let res =
+                contract._crear_publicacion(nombre_producto, id_vendedor, stock_a_vender, precio);
+            assert_eq!(res, Err(ErrorMarketplace::RolInvalido));
+        }
+
+        #[ink::test]
+        fn crear_publicacion_precio_invalido() {
+            let mut contract = contract_dummy();
+            let id_vendedor = account(2);
+            let id_producto = 1;
+            let nombre_producto = "Producto de prueba".to_string();
+            let stock_a_vender = 5;
+            let precio = 0; // Precio inválido
+
+            let deposito = Deposito::new(id_producto, id_vendedor, 10);
+            contract
+                .stock_general
+                .insert((id_vendedor, id_producto), &deposito);
+
+            let res =
+                contract._crear_publicacion(nombre_producto, id_vendedor, stock_a_vender, precio);
+            assert_eq!(res, Err(ErrorMarketplace::PrecioInvalido));
+        }
+
+        #[ink::test]
+        fn crear_publicacion_stock_insuficiente() {
+            let mut contract = contract_dummy();
+            let id_vendedor = account(2);
+            let nombre_producto = "Producto de prueba".to_string();
+            let descripcion = "Descripcion de prueba".to_string();
+            let categoria = Categoria::Tecnologia;
+            let stock_a_vender = 15; // Más que el stock disponible
+            let precio = 100;
+
+            //Registramos el producto y creamos un depósito con stock 10
+            set_caller(id_vendedor);
+            let _ = contract._registrar_producto(
+                id_vendedor,
+                nombre_producto.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                10, // Stock inicial
+            );
+
+            let res =
+                contract._crear_publicacion(nombre_producto, id_vendedor, stock_a_vender, precio);
+            assert_eq!(res, Err(ErrorMarketplace::StockDepositoInsuficiente));
+        }
+
+        #[ink::test]
+        fn crear_publicacion_falla_producto_no_existe() {
+            let mut contrato = contract_dummy();
+            let vendedor = account(2);
+
+            let nombre_producto = "Producto X".to_string(); // No existe
+            let stock_a_vender = 10;
+            let precio = 1000;
+
+            let result = contrato._crear_publicacion(nombre_producto, vendedor, stock_a_vender, precio);
+
+            assert_eq!(result, Err(ErrorMarketplace::ProductoNoExiste));
+        }
+
+
         /// Tests Marketplace Helpers
         #[ink::test]
         fn validacion_producto_nombre_espacios() {
@@ -1529,7 +1998,7 @@ mod market_place {
         #[ink::test]
         fn verificar_rol_comprador_ok() {
             let mut contract = nuevo_contrato();
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(1));
+            set_caller(account(1));
             let _ = contract.registrar_usuario("comprador".to_string(), Rol::Comprador);
             let res = contract.verificar_rol_comprador(account(1));
             assert_eq!(res, Ok(()));
@@ -1537,7 +2006,7 @@ mod market_place {
         #[ink::test]
         fn verificar_rol_comprador_error_rol_invalido() {
             let mut contract = nuevo_contrato();
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(2));
+            set_caller(account(2));
             let _ = contract.registrar_usuario("vendedor".to_string(), Rol::Vendedor);
             let res = contract.verificar_rol_comprador(account(2));
             assert_eq!(res, Err(ErrorMarketplace::RolInvalido));
@@ -1546,7 +2015,7 @@ mod market_place {
         fn verificar_usuario_existe_ok() {
             let mut contract = contract_dummy();
             let usuario = Usuario::new("test".to_string(), Rol::Comprador, account(4));
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(4));
+            set_caller(account(4));
             let registrar_ok =
                 contract.registrar_usuario(usuario.username.clone(), usuario.rol.clone());
             assert_eq!(registrar_ok, Ok(()));
@@ -1615,6 +2084,155 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::IDPublicacionEnUso));
         }
 
+        // Helper de insertar producto en catalogo
+        #[ink::test]
+        fn insertar_producto_en_catalogo_ok() {
+            let mut contrato = nuevo_contrato();
+
+            let producto = Producto::new(
+                1,
+                "Celular".to_string(),
+                "Descripcion del celular".to_string(),
+                Categoria::Tecnologia,
+            );
+
+            let res = contrato.insertar_producto_en_catalogo(producto.clone());
+            assert!(res.is_ok());
+
+            match contrato.productos.get(&1) {
+                Some(producto_guardado) => {
+                    assert_eq!(producto_guardado.id_producto, 1);
+                    assert_eq!(producto_guardado.nombre, "Celular");
+                    assert_eq!(producto_guardado.descripcion, "Descripcion del celular");
+                    assert_eq!(producto_guardado.categoria, Categoria::Tecnologia);
+                }
+                None => panic!("El producto no fue insertado en el catálogo"),
+            }
+        }
+
+        #[ink::test]
+        fn insertar_producto_en_catalogo_producto_ya_existe() {
+            let mut contrato = nuevo_contrato();
+            let producto = Producto::new(
+                1,
+                "Comida".to_string(),
+                "Descripcion de la comida".to_string(),
+                Categoria::Alimentos,
+            );
+
+            assert!(contrato
+                .insertar_producto_en_catalogo(producto.clone())
+                .is_ok());
+            let res = contrato.insertar_producto_en_catalogo(producto);
+            assert_eq!(res, Err(ErrorMarketplace::IDProductoEnUso));
+        }
+
+        //Helper de actualizar stock de deposito
+        #[ink::test]
+        fn actualizar_stock_producto_ok() {
+            let mut contrato = contract_dummy();
+            let vendedor = account(2);
+            let id_producto = 1;
+            let stock_inicial = 100;
+            let stock_a_vender = 30;
+
+            let deposito = Deposito::new(id_producto, vendedor, stock_inicial);
+            // Simular el estado inicial
+            contrato
+                .stock_general
+                .insert((vendedor, id_producto), &deposito);
+
+            // Ejecutar función
+            let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
+            // Verificar que fue exitoso
+            assert_eq!(result, Ok(()));
+
+            // Verificar que el nuevo stock es correcto
+            match contrato.stock_general.get(&(vendedor, id_producto)) {
+                Some(deposito) => {
+                    assert_eq!(deposito.stock, (stock_inicial - stock_a_vender));
+                }
+                None => panic!("El depósito no fue actualizado"),
+            }
+        }
+
+        #[ink::test]
+        fn actualizar_stock_producto_stock_insuficiente() {
+            let mut contrato = contract_dummy();
+            let vendedor = account(2);
+            let id_producto = 1;
+            let stock_inicial = 10;
+            let stock_a_vender = 20;
+
+            let deposito = Deposito::new(id_producto, vendedor, stock_inicial);
+            // Simular el estado inicial
+            contrato
+                .stock_general
+                .insert((vendedor, id_producto), &deposito);
+
+            let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
+
+            assert_eq!(result, Err(ErrorMarketplace::StockDepositoInsuficiente));
+        }
+
+        #[ink::test]
+        fn actualizar_stock_producto_producto_no_existe() {
+            let mut contrato = contract_dummy();
+            let vendedor = account(2);
+            let id_producto = 45;
+            let stock_a_vender = 5;
+
+            // No se inserta el producto en el depósito
+
+            let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
+
+            assert_eq!(result, Err(ErrorMarketplace::DepositoNoEncontrado));
+        }
+
+        #[ink::test]
+        fn actualizar_stock_producto_falla_validacion_de_stock() {
+            let mut contrato = contract_dummy();
+            let vendedor = account(2);
+            let id_producto = 1;
+            let stock_inicial = 50;
+            let stock_a_vender = 999; //valor invalido para la logica
+
+            let deposito = Deposito::new(id_producto, vendedor, stock_inicial);
+
+            contrato
+                .stock_general
+                .insert((vendedor, id_producto), &deposito);
+
+            let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
+
+            assert_eq!(result, Err(ErrorMarketplace::StockDepositoInsuficiente));
+        }
+
+        //Helper de vendedor tiene deposito
+        #[ink::test]
+        fn vendedor_tiene_deposito_para_producto_ambos_v_y_f() {
+            let mut contrato = nuevo_contrato();
+            let vendedor = account(2);
+            let id_producto = 1;
+
+            // No se tiene deposito
+            assert_eq!(
+                contrato.vendedor_tiene_deposito_para_producto(vendedor, id_producto),
+                false
+            );
+
+            let deposito = Deposito::new(id_producto, vendedor, 100);
+            contrato
+                .stock_general
+                .insert((vendedor, id_producto), &deposito);
+
+            // Ya se hizo el deposito
+            assert_eq!(
+                contrato.vendedor_tiene_deposito_para_producto(vendedor, id_producto),
+                true
+            );
+        }
+
         /// Tests de Impl Publicacion
         #[ink::test]
         fn publicacion_new_ok() {
@@ -1653,14 +2271,6 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::StockInsuficiente));
         }
 
-        ///Test Deposito
-        #[ink::test]
-        fn actualizar_stock_ok() {
-            let mut deposito = Deposito::new(1, account(2), 10);
-            let res = deposito.actualizar_stock(20);
-            assert_eq!(res, Ok(()));
-            assert_eq!(deposito.stock, 20);
-        }
         #[ink::test]
         fn orden_new_ok() {
             let id = 1;
@@ -1716,18 +2326,18 @@ mod market_place {
         }
 
         #[ink::test]
-        fn obtener_stock_deposito_error_producto_no_existe() {
+        fn obtener_stock_deposito_error_deposito_no_encontrado() {
             let contract = nuevo_contrato();
             // No existe el depósito para ese vendedor y producto
             let res = contract.obtener_stock_deposito(account(2), 1);
-            assert_eq!(res, Err(ErrorMarketplace::ProductoNoExiste));
+            assert_eq!(res, Err(ErrorMarketplace::DepositoNoEncontrado));
         }
 
         #[ink::test]
         fn modificar_stock_deposito_ok() {
             let mut contract = contract_dummy();
             // Registrar el usuario como vendedor
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(2));
+            set_caller(account(2));
             let id_vendedor = account(2);
             // Registramos producto y se inicializa el deposito
             let _ = contract._registrar_producto(
@@ -1749,7 +2359,7 @@ mod market_place {
         fn modificar_stock_deposito_error_producto_no_existe() {
             let mut contract = contract_dummy();
             // Registrar el usuario como vendedor
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(2));
+            set_caller(account(2));
             let _ = contract.registrar_usuario("vendedor".to_string(), Rol::Vendedor);
 
             // No existe el depósito para ese vendedor y producto
@@ -1791,32 +2401,159 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::PrecioInvalido));
         }
 
+        //Test de crear orden
         #[ink::test]
-        fn crear_orden_ok() {
-            let mut contract = contract_dummy();
-            // Registrar producto y depósito
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(account(2));
-            let id_vendedor = account(2);
-            let _ = contract._registrar_producto(
-                id_vendedor,
-                "Producto".to_string(),
-                "Descripcion".to_string(),
-                Categoria::Tecnologia,
-                10,
-            );
-            let id_producto = 1;
+        fn crear_orden_usuario_no_existe() {
+            let mut contrato = contract_dummy();
+            let comprador = account(99); //no registrado en el contrato
 
-            // Crear la publicación
-            let res = contract.crear_publicacion(id_producto, 5, 100);
-            assert_eq!(res, Ok(()));
+            let result = contrato._crear_orden(comprador, 0, 1, 100);
+            assert_eq!(result, Err(ErrorMarketplace::UsuarioNoExiste));
+        }
+
+        #[ink::test]
+        fn crear_orden_rol_incorrecto() {
+            let mut contrato = contract_dummy();
+            let rol = account(2);
+
+            let result = contrato._crear_orden(rol, 0, 1, 100);
+
+            assert_eq!(result, Err(ErrorMarketplace::RolInvalido));
+        }
+
+        #[ink::test]
+        fn crear_orden_publicacion_no_existe() {
+            let mut contrato = contract_dummy();
+            let comprador = account(1);
+
+            let result = contrato._crear_orden(comprador, 0, 1, 100);
+            assert_eq!(result, Err(ErrorMarketplace::PublicacionNoExiste));
+        }
+
+        #[ink::test]
+        fn crear_orden_stock_insuficiente() {
+            let mut contrato = contract_dummy();
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let producto = Producto::new(
+                1,
+                "Libro".to_string(),
+                "Descripcion del libro".to_string(),
+                Categoria::Otros,
+            );
+
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 1);
+
+            contrato.publicaciones.insert(0, &publicacion);
+
+            let result = contrato._crear_orden(comprador, 0, 2, 200);
+            assert_eq!(result, Err(ErrorMarketplace::StockInsuficiente));
+        }
+
+        #[ink::test]
+        fn crear_orden_overflow_en_precio_total() {
+            let mut contrato = contract_dummy();
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let producto = Producto::new(
+                1,
+                "Comida".to_string(),
+                "Descripcion de la comida".to_string(),
+                Categoria::Alimentos,
+            );
+
+            let publicacion = Publicacion::new(
+                0,
+                vendedor,
+                producto.id_producto,
+                u128::MAX, // Precio máximo para provocar overflow
+                100,
+            );
+
+            contrato.publicaciones.insert(0, &publicacion);
+
+            let result = contrato._crear_orden(comprador, 0, 2, u128::MAX);
+            assert_eq!(result, Err(ErrorMarketplace::Overflow));
+        }
+
+        #[ink::test]
+        fn crear_orden_monto_insuficiente() {
+            let mut contrato = contract_dummy();
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let producto = Producto::new(
+                1,
+                "Mesa".to_string(),
+                "Descripcion de la mesa".to_string(),
+                Categoria::Hogar,
+            );
+
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 5);
+
+            contrato.publicaciones.insert(0, &publicacion);
+
+            let result = contrato._crear_orden(comprador, 0, 2, 150); // Se espera 400
+            assert_eq!(result, Err(ErrorMarketplace::MontoInsuficiente));
+        }
+
+        #[ink::test]
+        fn crear_orden_valida() {
+            let mut contrato = contract_dummy();
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let producto = Producto::new(
+                1,
+                "Ropa".to_string(),
+                "Descripcion de la ropa".to_string(),
+                Categoria::Indumentaria,
+            );
+
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
+
+            contrato.publicaciones.insert(0, &publicacion);
+
+            let result = contrato._crear_orden(comprador, 0, 2, 500);
+            assert!(result.is_ok());
+
+            match contrato.ordenes.get(&0) {
+                Some(orden) => {
+                    assert_eq!(orden.id, 0);
+                    assert_eq!(orden.comprador, comprador);
+                    assert_eq!(orden.vendedor, vendedor);
+                    assert_eq!(orden.total, 400); // 200 * 2
+                }
+                None => panic!("La orden no fue creada correctamente"),
+            }
+        }
+
+        #[ink::test]
+        fn test_overflow_contador_ordenes() {
+            let mut contrato = contract_dummy();
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            contrato.contador_ordenes = u32::MAX;
+
+            let producto = Producto::new(
+                1,
+                "Ropa".to_string(),
+                "Descripcion de la ropa".to_string(),
+                Categoria::Indumentaria,
+            );
+
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
+
+            contrato.publicaciones.insert(0, &publicacion);
+            let result = contrato._crear_orden(comprador, 0, 2, 500);
+
+            assert_eq!(result, Err(ErrorMarketplace::Overflow));
         }
     }
-    //Preguntar, debemos listar en una pub fn todas las publicaciones del contrato?
-    /*
-    1. Operaciones aritméticas (líneas 796, 815, 492, 497, 621)
-    2. Comparaciones con <= 0 para tipos unsigned (líneas 799)
-    3. Imports no usados
-         */
+
 }
 
 /*
