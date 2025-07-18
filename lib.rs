@@ -3,7 +3,6 @@
 #[ink::contract]
 mod market_place {
     // use core::char::CharTryFromError;
-    use std::vec;
 
     use ink::prelude::string::String;
     // use ink::prelude::vec::Vec;
@@ -115,6 +114,7 @@ mod market_place {
         StockDepositoInsuficiente,
         ProductoYaPoseeDeposito,
         Overflow, // Error para manejar overflow en cálculos aritméticos
+        DepositoNoEncontrado,
     }
     // Structs
     #[derive(
@@ -316,7 +316,7 @@ mod market_place {
                 stock,
             }
         }
-        
+
         pub fn actualizar_stock(&mut self, stock: u32) -> Result<(), ErrorMarketplace> {
             self.stock = stock;
             Ok(())
@@ -638,7 +638,7 @@ mod market_place {
         ) -> Result<u32, ErrorMarketplace> {
             self.stock_general
                 .get(&(id_vendedor, id_producto))
-                .map_or(Err(ErrorMarketplace::ProductoNoExiste), |deposito| {
+                .map_or(Err(ErrorMarketplace::DepositoNoEncontrado), |deposito| {
                     Ok(deposito.stock)
                 })
         }
@@ -650,6 +650,7 @@ mod market_place {
             id_producto: u32,
             stock_a_vender: u32,
         ) -> Result<(), ErrorMarketplace> {
+            // Verificar que el depósito exista
             let stock_actual = self.obtener_stock_deposito(id_vendedor, id_producto)?;
             if stock_actual < stock_a_vender {
                 return Err(ErrorMarketplace::StockDepositoInsuficiente);
@@ -681,7 +682,8 @@ mod market_place {
             deposito.actualizar_stock(nuevo_stock)?;
 
             //se debe volver a insertar para poder actualizar el stock
-            self.stock_general.insert((id_vendedor, id_producto), &deposito); 
+            self.stock_general
+                .insert((id_vendedor, id_producto), &deposito);
             Ok(())
         }
         ///Funcion que modifica el stock de un depósito de un vendedor.
@@ -795,14 +797,14 @@ mod market_place {
         #[ink(message)]
         pub fn crear_publicacion(
             &mut self,
-            id_producto: u32,
+            nombre_producto: String,
             stock_a_vender: u32,
             precio: u128,
         ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
             //llamar helper de crear publicacion
             self._crear_publicacion(
-                id_producto,
+                nombre_producto,
                 caller, // id del vendedor
                 stock_a_vender,
                 precio,
@@ -813,7 +815,7 @@ mod market_place {
         //Esto es lo que se testea
         fn _crear_publicacion(
             &mut self,
-            id_producto: u32,
+            nombre_producto: String,
             id_vendedor: AccountId,
             stock_a_vender: u32,
             precio: u128,
@@ -822,7 +824,14 @@ mod market_place {
             self.verificar_rol_vendedor(id_vendedor)?;
             //Validar precio
             Publicacion::validar_precio(&precio)?;
-            //Validar stock para vender es menor o igual al stock total del deposito
+            //normalizar nombre de producto y validar que exista en el catalogo
+            let nombre_producto_normalizado =
+                Producto::normalizar_nombre_producto(&nombre_producto);
+            let id_producto = self
+                .buscar_producto_por_nombre(&nombre_producto_normalizado)
+                .map_err(|_| ErrorMarketplace::ProductoNoExiste)?;
+
+            //Validar deposito si existe y si cant a vender es menor al stock total del deposito
             self.validar_stock_deposito(id_vendedor, id_producto, stock_a_vender)?;
 
             // Generamos un nuevo ID para la publicación
@@ -859,7 +868,13 @@ mod market_place {
             Ok(())
         }
 
-        fn _crear_orden(&mut self, id_comprador: AccountId, id_publicacion: u32, cant_producto: u16, monto_dado: u128) -> Result<(), ErrorMarketplace> {
+        fn _crear_orden(
+            &mut self,
+            id_comprador: AccountId,
+            id_publicacion: u32,
+            cant_producto: u16,
+            monto_dado: u128,
+        ) -> Result<(), ErrorMarketplace> {
             // Verificar que el usuario exista
             self.verificar_usuario_existe(id_comprador)?;
 
@@ -872,11 +887,10 @@ mod market_place {
             // Verificar que el stock sea suficiente y asi poder crear la orden
             publicacion.verificar_stock(cant_producto as u32)?;
 
-           let tot_orden = match publicacion.precio.checked_mul(cant_producto as u128) {
+            let tot_orden = match publicacion.precio.checked_mul(cant_producto as u128) {
                 Some(valor) => valor,
                 None => return Err(ErrorMarketplace::Overflow),
             };
-
 
             //buscar documentacion de ink para calculos aritmeticos
             // Verificar que el monto dado sea suficiente para cubrir el total de la orden
@@ -897,13 +911,15 @@ mod market_place {
 
             self.ordenes.insert(nueva_id, &orden);
 
-            self.contador_ordenes = self.contador_ordenes.checked_add(1).ok_or(ErrorMarketplace::Overflow)?;
+            self.contador_ordenes = self
+                .contador_ordenes
+                .checked_add(1)
+                .ok_or(ErrorMarketplace::Overflow)?;
 
-
-            Ok(())            
+            Ok(())
         }
 
-        
+        // Busca la orden con el ID dado dentro del Mapping ordenes
         /// Función privada que marca una orden como enviada.
         ///
         /// # Parámetros
@@ -1012,7 +1028,6 @@ mod market_place {
             let caller = self.env().caller();
             self._marcar_orden_como_recibida(caller, id_orden)
         }
-
     }
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
     /// module and test functions are marked with a `#[test]` attribute.
@@ -1041,7 +1056,6 @@ mod market_place {
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(caller);
         }
 
-
         fn contract_dummy() -> MarketPlace {
             let mut contract = nuevo_contrato();
             set_caller(account(1));
@@ -1058,7 +1072,6 @@ mod market_place {
                 .ok();
             contract
         }
-
         #[test]
         fn test_orden_enviada_ok() {
             let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
@@ -1090,7 +1103,6 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
         }
 
-        
         #[test]
         fn test_orden_recibida_error() {
             let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
@@ -1198,7 +1210,7 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
         }
 
-        
+     
         /// Test MarketPlace
         #[ink::test]
         fn registrar_usuario_ok() {
@@ -1256,6 +1268,222 @@ mod market_place {
                 stock,
             );
             assert_eq!(res, Ok(()));
+            if let Some(producto_guardado) = contract.productos.get(&1) {
+                assert_eq!(
+                    producto_guardado.nombre,
+                    Producto::normalizar_nombre_producto(&nombre)
+                );
+                assert_eq!(producto_guardado.descripcion, descripcion);
+                assert_eq!(producto_guardado.categoria, categoria);
+            } else {
+                // Si no se guardó el producto, fallamos el test
+                panic!("El producto no fue insertado en el catálogo");
+            }
+        }
+        #[ink::test]
+        fn registrar_producto_existente_sin_deposito_inicializa_ok() {
+            let mut contract = contract_dummy();
+            let nombre = String::from("Producto existente");
+            let descripcion = String::from("Descripción");
+            let categoria = Categoria::Tecnologia;
+            let stock = 10;
+            let id_vendedor = account(2);
+
+            // Primero, registrar el producto con otro vendedor (account(3))
+            set_caller(account(3));
+            let _ = contract._registrar_producto(
+                account(3),
+                nombre.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                stock,
+            );
+
+            // Ahora, registrar el mismo producto con id_vendedor (account(2)), que NO tiene depósito aún
+            set_caller(id_vendedor);
+            let res = contract._registrar_producto(
+                id_vendedor,
+                nombre.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                stock,
+            );
+            assert_eq!(res, Ok(()));
+
+            // Verifica que el depósito fue inicializado para el vendedor actual
+            let id_producto = 1; // El primer producto registrado tiene id 1
+            let deposito = contract.stock_general.get(&(id_vendedor, id_producto));
+            assert!(deposito.is_some());
+            assert_eq!(deposito.unwrap().stock, stock);
+        }
+
+        #[ink::test]
+        fn buscar_producto_por_nombre_ok() {
+            let mut contract = nuevo_contrato();
+            // Insertar un producto en el mapping
+            let producto = Producto::new(
+                1,
+                "celular".to_string(),
+                "Un celular moderno".to_string(),
+                Categoria::Tecnologia,
+            );
+            contract.productos.insert(1, &producto);
+            contract.contador_productos = 1;
+
+            // Buscar por el nombre (sin normalizar, la función lo normaliza)
+            let res = contract.buscar_producto_por_nombre(&"Celular".to_string());
+            assert_eq!(res, Ok(1));
+        }
+        #[ink::test]
+        fn registrar_producto_existente_con_deposito_falla() {
+            let mut contract = contract_dummy();
+            let nombre = String::from("Producto existente");
+            let descripcion = String::from("Descripción");
+            let categoria = Categoria::Tecnologia;
+            let stock = 10;
+            let id_vendedor = account(2);
+
+            // Registrar el producto con el vendedor (account(2)), lo que también inicializa el depósito
+            set_caller(id_vendedor);
+            let prod1 = contract._registrar_producto(
+                id_vendedor,
+                nombre.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                stock,
+            );
+            assert_eq!(prod1, Ok(()));
+
+            // Intentar registrar el mismo producto nuevamente con el mismo vendedor
+            let res = contract._registrar_producto(
+                id_vendedor,
+                nombre.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                stock,
+            );
+            assert_eq!(res, Err(ErrorMarketplace::ProductoYaPoseeDeposito));
+        }
+        #[ink::test]
+        fn crear_publicacion_ok() {
+            let mut contract = contract_dummy();
+            let id_vendedor = account(2);
+            let id_producto = 1;
+            let stock_inicial = 10;
+            let stock_a_vender = 5;
+            let precio = 100;
+
+            // Simula depósito inicial para el vendedor y producto
+            let deposito = Deposito::new(id_producto, id_vendedor, stock_inicial);
+            contract
+                .stock_general
+                .insert((id_vendedor, id_producto), &deposito);
+            // Registramos el producto
+            let _ = contract._registrar_producto(
+                id_vendedor,
+                "Producto de prueba".to_string(),
+                "Descripción de prueba".to_string(),
+                Categoria::Tecnologia,
+                stock_inicial,
+            );
+
+            // Ejecuta la función
+            let res = contract._crear_publicacion(
+                "Producto de prueba".to_string(),
+                id_vendedor,
+                stock_a_vender,
+                precio,
+            );
+            assert_eq!(res, Ok(()));
+
+            // Verifica que la publicación fue insertada
+            if let Some(publicacion) = contract.publicaciones.get(&1) {
+                assert_eq!(publicacion.id_vendedor, id_vendedor);
+                assert_eq!(publicacion.id_producto, id_producto);
+                assert_eq!(publicacion.precio, precio);
+                assert_eq!(publicacion.stock_a_vender, stock_a_vender);
+            } else {
+                panic!("La publicación no fue insertada en el mapping");
+            }
+
+            // Verifica que el stock fue actualizado
+            if let Some(deposito_actualizado) =
+                contract.stock_general.get(&(id_vendedor, id_producto))
+            {
+                assert_eq!(deposito_actualizado.stock, stock_inicial - stock_a_vender);
+            } else {
+                panic!("El depósito no fue actualizado");
+            }
+        }
+
+        #[ink::test]
+        fn crear_publicacion_usuario_no_existe() {
+            let mut contract = contract_dummy();
+            let id_vendedor = account(99); // No existe
+            let nombre_producto = "Producto de prueba".to_string();
+            let stock_a_vender = 5;
+            let precio = 100;
+
+            let res =
+                contract._crear_publicacion(nombre_producto, id_vendedor, stock_a_vender, precio);
+            assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
+        }
+
+        #[ink::test]
+        fn crear_publicacion_rol_invalido() {
+            let mut contract = contract_dummy();
+            let id_vendedor = account(1); // Comprador, no vendedor
+            let nombre_producto = "Producto de prueba".to_string();
+            let stock_a_vender = 5;
+            let precio = 100;
+
+            let res =
+                contract._crear_publicacion(nombre_producto, id_vendedor, stock_a_vender, precio);
+            assert_eq!(res, Err(ErrorMarketplace::RolInvalido));
+        }
+
+        #[ink::test]
+        fn crear_publicacion_precio_invalido() {
+            let mut contract = contract_dummy();
+            let id_vendedor = account(2);
+            let id_producto = 1;
+            let nombre_producto = "Producto de prueba".to_string();
+            let stock_a_vender = 5;
+            let precio = 0; // Precio inválido
+
+            let deposito = Deposito::new(id_producto, id_vendedor, 10);
+            contract
+                .stock_general
+                .insert((id_vendedor, id_producto), &deposito);
+
+            let res =
+                contract._crear_publicacion(nombre_producto, id_vendedor, stock_a_vender, precio);
+            assert_eq!(res, Err(ErrorMarketplace::PrecioInvalido));
+        }
+
+        #[ink::test]
+        fn crear_publicacion_stock_insuficiente() {
+            let mut contract = contract_dummy();
+            let id_vendedor = account(2);
+            let nombre_producto = "Producto de prueba".to_string();
+            let descripcion = "Descripcion de prueba".to_string();
+            let categoria = Categoria::Tecnologia;
+            let stock_a_vender = 15; // Más que el stock disponible
+            let precio = 100;
+
+            //Registramos el producto y creamos un depósito con stock 10
+            set_caller(id_vendedor);
+            let _ = contract._registrar_producto(
+                id_vendedor,
+                nombre_producto.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                10, // Stock inicial
+            );
+
+            let res =
+                contract._crear_publicacion(nombre_producto, id_vendedor, stock_a_vender, precio);
+            assert_eq!(res, Err(ErrorMarketplace::StockDepositoInsuficiente));
         }
 
         /// Tests Marketplace Helpers
@@ -1387,9 +1615,9 @@ mod market_place {
         // Helper de insertar producto en catalogo
         #[ink::test]
         fn insertar_producto_en_catalogo_ok() {
-            let mut contrato= nuevo_contrato();
+            let mut contrato = nuevo_contrato();
 
-            let producto=Producto::new(
+            let producto = Producto::new(
                 1,
                 "Celular".to_string(),
                 "Descripcion del celular".to_string(),
@@ -1405,28 +1633,27 @@ mod market_place {
                     assert_eq!(producto_guardado.nombre, "Celular");
                     assert_eq!(producto_guardado.descripcion, "Descripcion del celular");
                     assert_eq!(producto_guardado.categoria, Categoria::Tecnologia);
-                },
+                }
                 None => (),
-                
-            } 
+            }
         }
 
         #[ink::test]
         fn insertar_producto_en_catalogo_producto_ya_existe() {
             let mut contrato = nuevo_contrato();
-            let producto=Producto::new(
+            let producto = Producto::new(
                 1,
                 "Comida".to_string(),
                 "Descripcion de la comida".to_string(),
                 Categoria::Alimentos,
             );
 
-            assert!(contrato.insertar_producto_en_catalogo(producto.clone()).is_ok());
+            assert!(contrato
+                .insertar_producto_en_catalogo(producto.clone())
+                .is_ok());
             let res = contrato.insertar_producto_en_catalogo(producto);
             assert_eq!(res, Err(ErrorMarketplace::IDProductoEnUso));
         }
-
-
 
         //Helper de actualizar stock de deposito
         #[ink::test]
@@ -1441,7 +1668,7 @@ mod market_place {
             // Simular el estado inicial
             contrato
                 .stock_general
-                .insert((vendedor, id_producto),&deposito);
+                .insert((vendedor, id_producto), &deposito);
 
             // Ejecutar función
             let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
@@ -1452,9 +1679,9 @@ mod market_place {
             match contrato.stock_general.get(&(vendedor, id_producto)) {
                 Some(deposito) => {
                     assert_eq!(deposito.stock, (stock_inicial - stock_a_vender));
-                },
+                }
                 None => (),
-            } 
+            }
         }
 
         #[ink::test]
@@ -1487,7 +1714,7 @@ mod market_place {
 
             let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
 
-            assert_eq!(result, Err(ErrorMarketplace::ProductoNoExiste));
+            assert_eq!(result, Err(ErrorMarketplace::DepositoNoEncontrado));
         }
 
         #[ink::test]
@@ -1506,7 +1733,7 @@ mod market_place {
 
             let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
 
-            assert_eq!(result, Err(ErrorMarketplace::StockDepositoInsuficiente)); // O el error que uses en validar
+            assert_eq!(result, Err(ErrorMarketplace::StockDepositoInsuficiente));
         }
 
         //Helper de vendedor tiene deposito
@@ -1517,16 +1744,22 @@ mod market_place {
             let id_producto = 1;
 
             // No se tiene deposito
-            assert_eq!(contrato.vendedor_tiene_deposito_para_producto(vendedor, id_producto), false);
+            assert_eq!(
+                contrato.vendedor_tiene_deposito_para_producto(vendedor, id_producto),
+                false
+            );
 
             let deposito = Deposito::new(id_producto, vendedor, 100);
-            contrato.stock_general.insert((vendedor, id_producto), &deposito);
+            contrato
+                .stock_general
+                .insert((vendedor, id_producto), &deposito);
 
             // Ya se hizo el deposito
-            assert_eq!(contrato.vendedor_tiene_deposito_para_producto(vendedor, id_producto), true);
+            assert_eq!(
+                contrato.vendedor_tiene_deposito_para_producto(vendedor, id_producto),
+                true
+            );
         }
-
-
 
         /// Tests de Impl Publicacion
         #[ink::test]
@@ -1629,11 +1862,11 @@ mod market_place {
         }
 
         #[ink::test]
-        fn obtener_stock_deposito_error_producto_no_existe() {
+        fn obtener_stock_deposito_error_deposito_no_encontrado() {
             let contract = nuevo_contrato();
             // No existe el depósito para ese vendedor y producto
             let res = contract.obtener_stock_deposito(account(2), 1);
-            assert_eq!(res, Err(ErrorMarketplace::ProductoNoExiste));
+            assert_eq!(res, Err(ErrorMarketplace::DepositoNoEncontrado));
         }
 
         #[ink::test]
@@ -1717,13 +1950,12 @@ mod market_place {
         #[ink::test]
         fn crear_orden_rol_incorrecto() {
             let mut contrato = contract_dummy();
-            let rol = account(2); 
+            let rol = account(2);
 
             let result = contrato._crear_orden(rol, 0, 1, 100);
 
             assert_eq!(result, Err(ErrorMarketplace::RolInvalido));
         }
-
 
         #[ink::test]
         fn crear_orden_publicacion_no_existe() {
@@ -1740,20 +1972,14 @@ mod market_place {
             let comprador = account(1);
             let vendedor = account(2);
 
-            let producto=Producto::new(
+            let producto = Producto::new(
                 1,
                 "Libro".to_string(),
                 "Descripcion del libro".to_string(),
                 Categoria::Otros,
             );
 
-            let publicacion= Publicacion::new(
-                0,
-                vendedor,
-                producto.id_producto,
-                200,
-                1, 
-            );
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 1);
 
             contrato.publicaciones.insert(0, &publicacion);
 
@@ -1767,19 +1993,19 @@ mod market_place {
             let comprador = account(1);
             let vendedor = account(2);
 
-            let producto=Producto::new(
+            let producto = Producto::new(
                 1,
                 "Comida".to_string(),
                 "Descripcion de la comida".to_string(),
                 Categoria::Alimentos,
             );
 
-            let publicacion= Publicacion::new(
+            let publicacion = Publicacion::new(
                 0,
                 vendedor,
                 producto.id_producto,
                 u128::MAX, // Precio máximo para provocar overflow
-                100, 
+                100,
             );
 
             contrato.publicaciones.insert(0, &publicacion);
@@ -1794,21 +2020,14 @@ mod market_place {
             let comprador = account(1);
             let vendedor = account(2);
 
-
-            let producto=Producto::new(
+            let producto = Producto::new(
                 1,
                 "Mesa".to_string(),
                 "Descripcion de la mesa".to_string(),
                 Categoria::Hogar,
             );
 
-            let publicacion= Publicacion::new(
-                0,
-                vendedor,
-                producto.id_producto,
-                200,
-                5, 
-            );
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 5);
 
             contrato.publicaciones.insert(0, &publicacion);
 
@@ -1822,20 +2041,14 @@ mod market_place {
             let comprador = account(1);
             let vendedor = account(2);
 
-            let producto=Producto::new(
+            let producto = Producto::new(
                 1,
                 "Ropa".to_string(),
                 "Descripcion de la ropa".to_string(),
                 Categoria::Indumentaria,
             );
 
-            let publicacion= Publicacion::new(
-                0,
-                vendedor,
-                producto.id_producto,
-                200,
-                10, 
-            );
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
 
             contrato.publicaciones.insert(0, &publicacion);
 
@@ -1849,7 +2062,7 @@ mod market_place {
                     assert_eq!(orden.vendedor, vendedor);
                     assert_eq!(orden.total, 400); // 200 * 2
                 }
-                None => ()
+                None => (),
             }
         }
 
@@ -1859,32 +2072,22 @@ mod market_place {
             let comprador = account(1);
             let vendedor = account(2);
 
-            contrato.contador_ordenes=u32::MAX;
+            contrato.contador_ordenes = u32::MAX;
 
-            let producto=Producto::new(
+            let producto = Producto::new(
                 1,
                 "Ropa".to_string(),
                 "Descripcion de la ropa".to_string(),
                 Categoria::Indumentaria,
             );
 
-            let publicacion= Publicacion::new(
-                0,
-                vendedor,
-                producto.id_producto,
-                200,
-                10, 
-            );
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
 
             contrato.publicaciones.insert(0, &publicacion);
             let result = contrato._crear_orden(comprador, 0, 2, 500);
 
             assert_eq!(result, Err(ErrorMarketplace::Overflow));
         }
-
-
-
-
     }
     //Preguntar, debemos listar en una pub fn todas las publicaciones del contrato?
     /*
