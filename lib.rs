@@ -919,7 +919,7 @@ mod market_place {
             Ok(())
         }
       
-            // Busca la orden con el ID dado dentro del Mapping ordenes
+        // Busca la orden con el ID dado dentro del Mapping ordenes
         /// Función privada que marca una orden como enviada.
         ///
         /// # Parámetros
@@ -936,9 +936,6 @@ mod market_place {
         /// - 'Ok(())' si la orden fue marcada como enviada correctamente.
         /// - 'Err(ErrorMarketplace::OrdenNoExiste)' si no existe la orden con el 'id_orden' dado.
         /// - Propaga otros errores que retorne 'marcar_enviada'.
-        #[ink(message)]
-        pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
-            let caller = self.env().caller();
         fn _marcar_orden_como_enviada(
             &mut self,
             caller: AccountId,
@@ -1986,7 +1983,7 @@ mod market_place {
     3. Imports no usados
          */
 }
-
+}
 /*
 /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
 ///
