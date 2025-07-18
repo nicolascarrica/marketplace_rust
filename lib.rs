@@ -2,11 +2,11 @@
 
 #[ink::contract]
 mod market_place {
-    use core::char::CharTryFromError;
+    // use core::char::CharTryFromError;
     use std::vec;
 
     use ink::prelude::string::String;
-    use ink::prelude::vec::Vec;
+    // use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
     //use ink_e2e::sr25519::PublicKey;
     //use ink_e2e::subxt_signer::bip39::serde::de::value::Error;
@@ -165,13 +165,6 @@ mod market_place {
         }
     }
 
-    fn validar_rol_igual(rol: &Rol, rol_a_validar: Rol) -> Result<(), ErrorMarketplace> {
-        if *rol == rol_a_validar {
-            Ok(())
-        } else {
-            Err(ErrorMarketplace::RolInvalido)
-        }
-    }
     #[derive(
         Debug,
         Clone,
@@ -449,8 +442,11 @@ mod market_place {
             nuevo_rol: Rol,
         ) -> Result<(), ErrorMarketplace> {
             let usuario = self.verificar_usuario_existe(id)?;
-            validar_rol_igual(&usuario.rol, nuevo_rol)?;
-            Ok(())
+            if usuario.rol == nuevo_rol {
+                Err(ErrorMarketplace::RolYaAsignado)
+            } else {
+                Ok(())
+            }
         }
 
         //Helper verificar usuario exista
@@ -968,8 +964,8 @@ mod market_place {
             let mut contrato = nuevo_contrato();
             test::set_caller::<ink::env::DefaultEnvironment>(account(2));
             let _ = contrato.registrar_usuario("ana".to_string(), Rol::Comprador);
-
-            let res = contrato.modificar_rol(Rol::Ambos);
+            let id_vendedor = account(2);
+            let res = contrato._modificar_rol(id_vendedor, Rol::Ambos);
             assert_eq!(res, Ok(()));
         }
 
@@ -978,8 +974,8 @@ mod market_place {
             let mut contrato = nuevo_contrato();
             test::set_caller::<ink::env::DefaultEnvironment>(account(3));
             let _ = contrato.registrar_usuario("luis".to_string(), Rol::Vendedor);
-
-            let res = contrato.modificar_rol(Rol::Vendedor);
+            let id_vendedor = account(3);
+            let res = contrato._modificar_rol(id_vendedor, Rol::Vendedor);
             assert_eq!(res, Err(ErrorMarketplace::RolYaAsignado));
         }
         #[ink::test]
