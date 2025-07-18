@@ -2,3 +2,5 @@ target/
 **/*.contract
 **/*.wasm
 Cargo.lock
+/coverage/
+/src/coverage/
