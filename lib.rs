@@ -1364,8 +1364,13 @@ mod market_place {
 
             //Registramos el producto y creamos un depósito con stock 10
             set_caller(id_vendedor);
-            let _ =
-                contract._registrar_producto(nombre_producto.clone(), descripcion, categoria, 10);
+            let _ = contract._registrar_producto(
+                id_vendedor,
+                nombre_producto.clone(),
+                descripcion.clone(),
+                categoria.clone(),
+                10, // Stock inicial
+            );
 
             let res =
                 contract._crear_publicacion(nombre_producto, id_vendedor, stock_a_vender, precio);
