@@ -517,7 +517,7 @@ mod market_place {
         ///
         /// # Retorna
         /// Una nueva instancia de `Orden` con estado `EstadoOrden::Pendiente`.
-        ///
+
         pub fn new(
             id: u32,
             comprador: AccountId,
@@ -536,7 +536,6 @@ mod market_place {
                 estado: EstadoOrden::Pendiente,
             }
         }
-
         /// Marca la orden como enviada.
         ///
         /// # Parámetros
