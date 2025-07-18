@@ -1753,7 +1753,7 @@ mod market_place {
         }
 
         #[ink::test]
-        fn obtener_stock_deposito_no_existe() {
+        fn obtener_stock_deposito_error_deposito_no_encontrado() {
             let contract = nuevo_contrato();
             // No existe el depósito para ese vendedor y producto
             let res = contract.obtener_stock_deposito(account(2), 1);
