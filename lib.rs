@@ -1102,6 +1102,115 @@ mod market_place {
             let res = orden.marcar_recibida(account(1));
             assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
         }
+
+        #[test]
+        fn test_orden_recibida_error() {
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Cancelada;
+            let res = orden.marcar_recibida(account(1));
+            assert_eq!(res, Err(ErrorMarketplace::OrdenCancelada));
+        }
+
+        #[test]
+        fn test_marcar_recibida_no_autorizado() {
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Enviado;
+            let res = orden.marcar_recibida(account(3)); // caller NO es el comprador
+            assert_eq!(res, Err(ErrorMarketplace::NoEsComprador));
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_enviada_ok() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_enviada(account(2), 1);
+            assert_eq!(res, Ok(()));
+
+            let actualizada = contrato.ordenes.get(1).unwrap();
+            assert_eq!(actualizada.estado, EstadoOrden::Enviado);
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_enviada_orden_no_existe() {
+            let mut contrato = contract_dummy();
+
+            let res = contrato._marcar_orden_como_enviada(account(2), 999);
+            assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_enviada_no_es_vendedor() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_enviada(account(3), 1);
+            assert_eq!(res, Err(ErrorMarketplace::NoEsVendedor));
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_enviada_cancelada() {
+            let mut contrato = contract_dummy();
+
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Cancelada;
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_enviada(account(2), 1);
+            assert_eq!(res, Err(ErrorMarketplace::OrdenCancelada));
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_recibida_ok() {
+            let mut contrato = contract_dummy();
+
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Enviado;
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_recibida(account(1), 1);
+            assert_eq!(res, Ok(()));
+
+            let actualizada = contrato.ordenes.get(1).unwrap();
+            assert_eq!(actualizada.estado, EstadoOrden::Recibido);
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_recibida_orden_no_existe() {
+            let mut contrato = contract_dummy();
+
+            let res = contrato._marcar_orden_como_recibida(account(1), 999);
+            assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
+        }
+
+        #[ink::test]
+        fn test_marcar_orden_como_recibida_no_es_comprador() {
+            let mut contrato = contract_dummy();
+
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Enviado;
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_recibida(account(3), 1);
+            assert_eq!(res, Err(ErrorMarketplace::NoEsComprador));
+        }
+        
+        #[ink::test]
+        fn test_marcar_orden_como_recibida_estado_invalido() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 3, 300); // estado: Pendiente
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._marcar_orden_como_recibida(account(1), 1);
+            assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
+        }
+
+     
         /// Test MarketPlace
         #[ink::test]
         fn registrar_usuario_ok() {
