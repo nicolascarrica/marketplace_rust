@@ -100,6 +100,7 @@ mod market_place {
         PublicacionNoExiste,
         StockInsuficiente,
         OrdenNoExiste,
+        OrdenCancelada,
         NoEsComprador,
         NoEsVendedor,
         EstadoInvalido,
@@ -357,6 +358,72 @@ mod market_place {
                 total,
                 estado: EstadoOrden::Pendiente,
             }
+        }
+
+        /// Marca la orden como enviada.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable a la orden que se quiere modificar.
+        /// - 'caller: AccountId': cuenta que está intentando cambiar el estado (debe ser el vendedor).
+        ///
+        /// # Comportamiento
+        /// 1. Verifica que el 'caller' sea el vendedor asignado a esta orden.
+        /// 2. Verifica que la orden no esté en estado cancelado.
+        /// 3. Si las validaciones pasan, cambia el estado de la orden a 'Enviado'.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la operación se realizó correctamente.
+        /// - 'Err(ErrorMarketplace::NoEsVendedor)' si el 'caller' no es el vendedor.
+        /// - 'ErrorMarketplace::OrdenCancelada' si el estado de la orden está como cancelada.
+        fn marcar_enviada(&mut self, caller: AccountId) -> Result<(), ErrorMarketplace> {
+            //validar que quien llame sea vendedor
+            if caller != self.vendedor {
+                return Err(ErrorMarketplace::NoEsVendedor);
+            }
+            //validar que la orden no este cancelada
+            if self.estado == EstadoOrden::Cancelada {
+                return Err(ErrorMarketplace::OrdenCancelada);
+            }
+            //como la orden se pone por default en estado "Pendiente", no necesito preguntar si esta pendiente para cambiarla(?
+
+            //cambiar el estado a "Enviado"
+            self.estado = EstadoOrden::Enviado;
+            Ok(())
+        }
+
+        /// Marca la orden como recibida.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable a la orden que se quiere modificar.
+        /// - 'caller: AccountId': cuenta que está intentando cambiar el estado (debe ser el comprador).
+        ///
+        /// # Comportamiento
+        /// 1. Verifica que el 'caller' sea el comprador asignado a esta orden.
+        /// 2. Verifica que la orden no esté cancelada.
+        /// 3. Verifica que la orden esté en estado 'Enviado' (sólo puede marcarse como recibida si ya fue enviada).
+        /// 4. Si las validaciones pasan, cambia el estado de la orden a 'Recibido'.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la operación se realizó correctamente.
+        /// - 'Err(ErrorMarketplace::NoEsComprador)' si el 'caller' no es el comprador.
+        /// - 'Err(ErrorMarketplace::OrdenCancelada)' si el estado de la orden está como cancelada.
+        /// - 'Err(ErrorMarketplace::EstadoInvalido)' si la orden no está en estado 'Enviado'.
+        fn marcar_recibida(&mut self, caller: AccountId) -> Result<(), ErrorMarketplace> {
+            //validar que quien llama sea el comprador
+            if caller != self.comprador {
+                return Err(ErrorMarketplace::NoEsComprador);
+            }
+            //validar que la orden no este cancelada
+            if self.estado == EstadoOrden::Cancelada {
+                return Err(ErrorMarketplace::OrdenCancelada);
+            }
+            //solo se marca como recibida si ya fue enviada
+            if self.estado != EstadoOrden::Enviado {
+                return Err(ErrorMarketplace::EstadoInvalido);
+            }
+            //cambiar el estado a "Recibido"
+            self.estado = EstadoOrden::Recibido;
+            Ok(())
         }
     }
 
@@ -836,59 +903,116 @@ mod market_place {
             Ok(())            
         }
 
-        #[ink(message)]
-        pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
-            let caller = self.env().caller();
-            // Busca la orden con el ID dado dentro del Mapping ordenes
+        
+        /// Función privada que marca una orden como enviada.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'caller: AccountId': cuenta que realiza la acción (debe ser vendedor).
+        /// - 'id_orden: u32': identificador único de la orden a modificar.
+        ///
+        /// # Comportamiento
+        /// 1. Obtiene la orden con el 'id_orden'.
+        /// 2. Llama al método 'marcar_enviada' de la orden pasándole el `caller`.
+        /// 3. Si la operación es exitosa, actualiza la orden en el mapping.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la orden fue marcada como enviada correctamente.
+        /// - 'Err(ErrorMarketplace::OrdenNoExiste)' si no existe la orden con el 'id_orden' dado.
+        /// - Propaga otros errores que retorne 'marcar_enviada'.
+        fn _marcar_orden_como_enviada(
+            &mut self,
+            caller: AccountId,
+            id_orden: u32,
+        ) -> Result<(), ErrorMarketplace> {
             if let Some(mut orden) = self.ordenes.get(id_orden) {
-                //El método get de Mapping te devuelve una copia de la orden
-                //validar que quien llame sea vendedor
-                if caller != orden.vendedor {
-                    return Err(ErrorOrden::NoEsVendedor);
+                match orden.marcar_enviada(caller) {
+                    Ok(()) => {
+                        self.ordenes.insert(id_orden, &orden);
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
                 }
-                //validar que la orden no este cancelada
-                if orden.estado == EstadoOrden::Cancelada {
-                    return Err(ErrorOrden::OrdenCancelada);
-                }
-                //como la orden se pone por default en estado "Pendiente", no necesito preguntar si esta pendiente para cambiarla(?
-
-                //cambiar el estado de la orden a "Enviado"
-                orden.estado = EstadoOrden::Enviado;
-                // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
-                self.ordenes.insert(id_orden, &orden);
-                Ok(())
             } else {
-                Err(ErrorOrden::OrdenNoExiste)
+                Err(ErrorMarketplace::OrdenNoExiste)
             }
         }
 
+        /// Método público para marcar una orden como enviada.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'id_orden: u32': identificador único de la orden a modificar.
+        ///
+        /// # Comportamiento
+        /// 1. Obtiene automáticamente el 'caller' de la llamada.
+        /// 2. Llama a la función privada '_marcar_orden_como_enviada'.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la orden fue marcada como enviada correctamente.
+        /// - Propaga errores desde '_marcar_orden_como_enviada'.
         #[ink(message)]
-        pub fn marcar_orden_como_recibida(&mut self, id_orden: u32) -> Result<(), ErrorOrden> {
+        pub fn marcar_orden_como_enviada(&mut self, id_orden: u32) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
-            // Busca la orden con el ID dado dentro del Mapping ordenes
+            self._marcar_orden_como_enviada(caller, id_orden)
+        }
+
+        /// Función privada que marca una orden como recibida.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'caller: AccountId': cuenta que realiza la acción (debe ser comprador).
+        /// - 'id_orden: u32': identificador único de la orden a modificar.
+        ///
+        /// # Comportamiento
+        /// 1. Obtiene la orden con el 'id_orden'.
+        /// 2. Llama al método 'marcar_recibida' de la orden pasándole el 'caller'.
+        /// 3. Si la operación es exitosa, actualiza la orden en el mapping.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la orden fue marcada como recibida correctamente.
+        /// - 'Err(ErrorMarketplace::OrdenNoExiste)' si no existe la orden con el 'id_orden' dado.
+        /// - Propaga otros errores que retorne 'marcar_recibida'.
+        fn _marcar_orden_como_recibida(
+            &mut self,
+            caller: AccountId,
+            id_orden: u32,
+        ) -> Result<(), ErrorMarketplace> {
             if let Some(mut orden) = self.ordenes.get(id_orden) {
-                //El método get de Mapping te devuelve una copia de la orden
-                //validar que quien llame sea comprador
-                if caller != orden.comprador {
-                    return Err(ErrorOrden::NoEsComprador);
+                match orden.marcar_recibida(caller) {
+                    Ok(()) => {
+                        self.ordenes.insert(id_orden, &orden);
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
                 }
-                //validar que la orden no este cancelada
-                if orden.estado == EstadoOrden::Cancelada {
-                    return Err(ErrorOrden::OrdenCancelada);
-                }
-                // Solo puede marcarse como recibida si fue enviada previamente
-                if orden.estado != EstadoOrden::Enviado {
-                    return Err(ErrorOrden::EstadoInvalido);
-                }
-                //cambiar el estado de la orden a "Recibido"
-                orden.estado = EstadoOrden::Recibido;
-                // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
-                self.ordenes.insert(id_orden, &orden);
-                Ok(())
             } else {
-                Err(ErrorOrden::OrdenNoExiste)
+                Err(ErrorMarketplace::OrdenNoExiste)
             }
         }
+
+        /// Método público para marcar una orden como recibida.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'id_orden: u32': identificador único de la orden a modificar.
+        ///
+        /// # Comportamiento
+        /// 1. Obtiene automáticamente el 'caller' de la llamada.
+        /// 2. Llama a la función privada '_marcar_orden_como_recibida'.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la orden fue marcada como recibida correctamente.
+        /// - Propaga errores desde '_marcar_orden_como_recibida'.
+        #[ink(message)]
+        pub fn marcar_orden_como_recibida(
+            &mut self,
+            id_orden: u32,
+        ) -> Result<(), ErrorMarketplace> {
+            let caller = self.env().caller();
+            self._marcar_orden_como_recibida(caller, id_orden)
+        }
+
     }
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
     /// module and test functions are marked with a `#[test]` attribute.
@@ -934,10 +1058,10 @@ mod market_place {
                 .ok();
             contract
         }
-/* 
+
         #[test]
         fn test_orden_enviada_ok() {
-            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
             let res = orden.marcar_enviada(account(2));
             assert_eq!(res, Ok(()));
             assert_eq!(orden.estado, EstadoOrden::Enviado);
@@ -945,14 +1069,14 @@ mod market_place {
 
         #[test]
         fn test_orden_enviada_no_autorizado() {
-            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
             let res = orden.marcar_enviada(account(3));
-            assert_eq!(res, Err(ErrorOrden::NoEsVendedor));
+            assert_eq!(res, Err(ErrorMarketplace::NoEsVendedor));
         }
 
         #[test]
         fn test_orden_recibida_ok() {
-            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
             orden.estado = EstadoOrden::Enviado;
             let res = orden.marcar_recibida(account(1));
             assert_eq!(res, Ok(()));
@@ -961,11 +1085,11 @@ mod market_place {
 
         #[test]
         fn test_marcar_recibida_estado_invalido() {
-            let mut orden = Orden::new(1, account(1), account(2), vec![], 100);
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
             let res = orden.marcar_recibida(account(1));
-            assert_eq!(res, Err(ErrorOrden::EstadoInvalido));
+            assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
         }
-*/
+        
         /// Test MarketPlace
         #[ink::test]
         fn registrar_usuario_ok() {
