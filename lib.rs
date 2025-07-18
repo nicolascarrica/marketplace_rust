@@ -1624,7 +1624,6 @@ mod market_place {
             let result = contrato.actualizar_stock_producto(vendedor, id_producto, stock_a_vender);
 
             assert_eq!(result, Err(ErrorMarketplace::StockDepositoInsuficiente));
-            // O el error que uses en validar
         }
 
         //Helper de vendedor tiene deposito
