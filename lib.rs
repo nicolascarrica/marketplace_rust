@@ -950,7 +950,7 @@ mod market_place {
         /// Llama al helper interno con el caller como vendedor.
         ///
         /// # Parámetros
-        /// - `id_producto`: ID del producto.
+        /// - `nombre_producto`: Nombre del producto.
         /// - `stock`: Nuevo stock a asignar.
         ///
         /// # Retorna
@@ -959,11 +959,11 @@ mod market_place {
         #[ink(message)]
         pub fn modificar_stock_deposito(
             &mut self,
-            id_producto: u32,
+            nombre_producto: String,
             stock: u32,
         ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
-            self._modificar_stock_deposito(caller, id_producto, stock)?;
+            self._modificar_stock_deposito(caller, nombre_producto, stock)?;
             Ok(())
         }
 
@@ -975,7 +975,7 @@ mod market_place {
         ///
         /// # Parámetros
         /// - `id_vendedor`: Cuenta del vendedor.
-        /// - `id_producto`: ID del producto.
+        /// - `nombre_producto`: Nombre del producto.
         /// - `stock`: Nuevo stock.
         ///
         /// # Retorna
@@ -986,13 +986,22 @@ mod market_place {
         fn _modificar_stock_deposito(
             &mut self,
             id_vendedor: AccountId,
-            id_producto: u32,
+            nombre_producto: String,
             stock: u32,
         ) -> Result<(), ErrorMarketplace> {
             // Verificar que el usuario sea vendedor
             self.verificar_rol_vendedor(id_vendedor)?;
             // Verificar que el stock sea válido
             Producto::validar_stock_producto(&stock)?;
+
+            // Normalizar el nombre del producto
+            let nombre_producto_normalizado =
+                Producto::normalizar_nombre_producto(&nombre_producto);
+
+            // validar que exista en el catalogo
+            let id_producto = self
+                .buscar_producto_por_nombre(&nombre_producto_normalizado)
+                .map_err(|_| ErrorMarketplace::ProductoNoExiste)?;
 
             // Obtener el depósito del vendedor
             let mut deposito = self
@@ -2253,11 +2262,10 @@ mod market_place {
                 Categoria::Tecnologia,
                 10,
             );
-            // Obtener ID del producto
-            let id_producto = 1; // Asumimos que el producto tiene ID 1
+        
 
             // Modificar el stock
-            let res = contract._modificar_stock_deposito(account(2), id_producto, 60);
+            let res = contract._modificar_stock_deposito(account(2), "Producto".to_string(), 60);
             assert_eq!(res, Ok(()));
         }
 
@@ -2269,9 +2277,10 @@ mod market_place {
             let _ = contract.registrar_usuario("vendedor".to_string(), Rol::Vendedor);
 
             // No existe el depósito para ese vendedor y producto
-            let res = contract._modificar_stock_deposito(account(2), 1, 25);
+            let res = contract._modificar_stock_deposito(account(2), "Producto".to_string(), 25);
             assert_eq!(res, Err(ErrorMarketplace::ProductoNoExiste));
         }
+
         #[ink::test]
         fn validar_stock_deposito_ok() {
             let mut contract = nuevo_contrato();
