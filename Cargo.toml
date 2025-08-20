@@ -13,6 +13,7 @@ parity-scale-codec = { version = "3.6", default-features = false, features = [
 scale-info = { version = "2.10", default-features = false, features = [
     "derive",
 ] }
+ink_e2e = "5.0.0"
 
 [dev-dependencies]
 ink_e2e = { version = "5.0.0" }
