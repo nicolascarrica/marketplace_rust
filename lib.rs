@@ -5,9 +5,8 @@ mod market_place {
     // use core::char::CharTryFromError;
     use ink::prelude::string::String;
     use ink::prelude::string::ToString;
-    // use ink::prelude::vec::Vec;
+    use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
-    use ink_e2e::subxt_signer::bip39::serde::de::value::Error;
     //use ink_e2e::sr25519::PublicKey;
     //use ink_e2e::subxt_signer::bip39::serde::de::value::Error;
 
@@ -172,24 +171,24 @@ mod market_place {
         }
 
         fn validar_cambio_rol(&self, nuevo_rol: &Rol) -> Result<(), ErrorMarketplace> {
-                match self.rol {
-                    Rol::Comprador | Rol::Vendedor => {
-                        if *nuevo_rol == Rol::Ambos {
-                            Ok(())
-                        } else {
-                            Err(ErrorMarketplace::CambioRolNoPermitido)
-                        }
-                    },
-                    Rol::Ambos => {
-                        // Si ya es Ambos, no puede cambiar a Comprador o Vendedor directamente
-                        if *nuevo_rol == Rol::Ambos {
-                            Err(ErrorMarketplace::RolYaAsignado)
-                        } else {
-                            Ok(())
-                        }
+            match self.rol {
+                Rol::Comprador | Rol::Vendedor => {
+                    if *nuevo_rol == Rol::Ambos {
+                        Ok(())
+                    } else {
+                        Err(ErrorMarketplace::CambioRolNoPermitido)
+                    }
+                }
+                Rol::Ambos => {
+                    // Si ya es Ambos, no puede cambiar a Comprador o Vendedor directamente
+                    if *nuevo_rol == Rol::Ambos {
+                        Err(ErrorMarketplace::RolYaAsignado)
+                    } else {
+                        Ok(())
                     }
                 }
             }
+        }
     }
 
     /// Representa un producto en el marketplace.
@@ -204,7 +203,7 @@ mod market_place {
     #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-    
+
     //Para poder visualizar el producto debo poner sus campos en pub
     pub struct Producto {
         pub id_producto: u32,
@@ -312,9 +311,8 @@ mod market_place {
     #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-    
 
-    pub struct Publicacion { 
+    pub struct Publicacion {
         id_publicacion: u32,
         id_vendedor: AccountId,
         id_producto: u32,
@@ -384,7 +382,9 @@ mod market_place {
             // Verifica si hay suficiente stock antes de actualizar
             self.verificar_stock(stock_pedido)?;
             // Actualiza el stock disponible restando la cantidad pedida
-            let nuevo_stock = self.stock_a_vender.checked_sub(stock_pedido)
+            let nuevo_stock = self
+                .stock_a_vender
+                .checked_sub(stock_pedido)
                 .ok_or(ErrorMarketplace::StockInsuficiente)?;
             self.stock_a_vender = nuevo_stock;
             Ok(())
@@ -479,7 +479,7 @@ mod market_place {
         productos: Mapping<u32, Producto>,        //id_producto -> Producto
         ordenes: Mapping<u32, Orden>,             //id_orden -> Orden
         stock_general: Mapping<(AccountId, u32), Deposito>, // (id_vendedor, id_producto) -> Deposito
-        productos_por_vendedor: Mapping<AccountId, Vec<u32>>,//Para que la busqueda sea mas facil, para id_vendedor -> Vec<id_producto> su propia lista de productos
+        productos_por_vendedor: Mapping<AccountId, Vec<u32>>, //Para que la busqueda sea mas facil, para id_vendedor -> Vec<id_producto> su propia lista de productos
         //Atributos auxiliares
         contador_ordenes: u32,
         contador_publicacion: u32,
@@ -1259,9 +1259,13 @@ mod market_place {
 
             //Agregamos el producto a la lista de productos del vendedor
 
-            let mut productos_vendedor = self.productos_por_vendedor.get(&id_vendedor).unwrap_or_else(|| Vec::new()); //En caso que el vendedor no tenga productos, se inicializa con un vector vacío
+            let mut productos_vendedor = self
+                .productos_por_vendedor
+                .get(&id_vendedor)
+                .unwrap_or_else(|| Vec::new()); //En caso que el vendedor no tenga productos, se inicializa con un vector vacío
             productos_vendedor.push(id_producto); // Agregamos el ID del producto a la lista de productos del vendedor
-            self.productos_por_vendedor.insert(&id_vendedor, &productos_vendedor); // Insertamos o actualizamos la lista de productos del vendedor en el mapping
+            self.productos_por_vendedor
+                .insert(&id_vendedor, &productos_vendedor); // Insertamos o actualizamos la lista de productos del vendedor en el mapping
 
             Ok(())
         }
@@ -1353,10 +1357,13 @@ mod market_place {
         #[ink(message)]
         pub fn mostrar_productos_propios(&self) -> Result<Vec<Producto>, ErrorMarketplace> {
             let caller = self.env().caller();
-            self._mostrar_productos_propios(caller)      
+            self._mostrar_productos_propios(caller)
         }
 
-        fn _mostrar_productos_propios(&self, id_vendedor: AccountId) -> Result<Vec<Producto>, ErrorMarketplace> {
+        fn _mostrar_productos_propios(
+            &self,
+            id_vendedor: AccountId,
+        ) -> Result<Vec<Producto>, ErrorMarketplace> {
             // Verificar que el vendedor exista
             self.verificar_usuario_existe(id_vendedor)?;
 
@@ -1364,7 +1371,8 @@ mod market_place {
             self.verificar_rol_vendedor(id_vendedor)?;
 
             // Obtener productos publicados
-            let productos = self.productos_por_vendedor
+            let productos = self
+                .productos_por_vendedor
                 .get(&id_vendedor)
                 .unwrap_or_else(Vec::new)
                 .iter()
@@ -1373,8 +1381,6 @@ mod market_place {
 
             Ok(productos)
         }
-
-
 
         // Busca la orden con el ID dado dentro del Mapping ordenes
         /// Función privada que marca una orden como enviada.
@@ -2345,7 +2351,6 @@ mod market_place {
                 Categoria::Tecnologia,
                 10,
             );
-        
 
             // Modificar el stock
             let res = contract._modificar_stock_deposito(account(2), "Producto".to_string(), 60);
