@@ -97,6 +97,9 @@ mod market_place {
         Overflow, // Error para manejar overflow en cálculos aritméticos
         DepositoNoEncontrado,
         CambioRolNoPermitido,
+        CancelacionNoSolicitada,
+        CancelacionYaPendiente,
+        CancelacionPendiente,
     }
     // Structs
 
@@ -415,6 +418,8 @@ mod market_place {
         cant_producto: u16, //cantidad de producto que se ordena
         estado: EstadoOrden,
         total: u128,
+        pendiente_cancelacion: bool,
+        cancelacion_solicitada_por: Option<Rol>,
     }
 
     /// Representa el depósito de un vendedor para un producto específico.
@@ -517,6 +522,8 @@ mod market_place {
                 cant_producto,
                 total,
                 estado: EstadoOrden::Pendiente,
+                pendiente_cancelacion: false,
+                cancelacion_solicitada_por: None,
             }
         }
         /// Marca la orden como enviada.
@@ -583,6 +590,61 @@ mod market_place {
             //cambiar el estado a "Recibido"
             self.estado = EstadoOrden::Recibido;
             Ok(())
+        }
+
+        /// Gestiona el proceso de cancelación de una orden.
+        ///
+        /// Este método implementa una cancelación por consentimiento mutuo:
+        /// - La primera llamada solicita la cancelación (solo el comprador puede solicitar la cancelacion).
+        /// - La segunda llamada, realizada por la otra parte, confirma la cancelación.
+        ///
+        /// # Parámetros
+        /// - 'caller': cuenta quien ejecuta la acción (comprador o vendedor).
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la solicitud o confirmación es válida.
+        /// - 'Err(ErrorMarketplace)' si ocurre algún error de autorización o estado.
+        pub fn gestionar_cancelacion(&mut self, caller: AccountId) -> Result<(), ErrorMarketplace> {
+            // Solo puede cancelarse si está pendiente
+            if self.estado != EstadoOrden::Pendiente {
+                return Err(ErrorMarketplace::EstadoInvalido);
+            }
+
+            // Determinar el rol del caller
+            // Se usa para verificar consentimiento mutuo
+            let rol_llamada = if caller == self.comprador {
+                Rol::Comprador
+            } else if caller == self.vendedor {
+                Rol::Vendedor
+            } else {
+                return Err(ErrorMarketplace::NoAutorizado);
+            };
+
+            match self.cancelacion_solicitada_por {
+                //nadie solicito la cancelacion antes => solo el comprador puede solicitarla
+                None => {
+                    if rol_llamada != Rol::Comprador {
+                        return Err(ErrorMarketplace::NoEsComprador);
+                    }
+                    //se marca como pendiente y se guarda inició de solicitud
+                    self.pendiente_cancelacion = true;
+                    self.cancelacion_solicitada_por = Some(Rol::Comprador);
+                    Ok(())
+                }
+
+                // La otra parte confirma la cancelación
+                Some(previo) if previo != rol_llamada => {
+                    // Ambas partes acordaron => cancelar definitivamente
+                    self.estado = EstadoOrden::Cancelada;
+                    // Reseteo las variables
+                    self.pendiente_cancelacion = false;
+                    self.cancelacion_solicitada_por = None;
+                    Ok(())
+                }
+
+                // El mismo usuario intenta cancelar dos veces
+                Some(_) => Err(ErrorMarketplace::CancelacionYaPendiente),
+            }
         }
     }
 
@@ -1491,6 +1553,60 @@ mod market_place {
             let caller = self.env().caller();
             self._marcar_orden_como_recibida(caller, id_orden)
         }
+
+        /// Función privada que gestiona la cancelación de una orden.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'caller: AccountId': cuenta que realiza la acción.
+        /// - 'id_orden: u32': identificador único de la orden a modificar.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la operación fue exitosa.
+        /// - 'Err(ErrorMarketplace)' si la orden no existe o falla la lógica.
+        fn _gestionar_cancelacion_orden(
+            &mut self,
+            caller: AccountId,
+            id_orden: u32,
+        ) -> Result<(), ErrorMarketplace> {
+            // Buscar la orden en el Mapping
+            // El método get de Mapping te devuelve una copia de la orden
+            if let Some(mut orden) = self.ordenes.get(id_orden) {
+                match orden.gestionar_cancelacion(caller) {
+                    Ok(()) => {
+                        // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
+                        self.ordenes.insert(id_orden, &orden);
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                }
+            } else {
+                // Orden inexistente
+                Err(ErrorMarketplace::OrdenNoExiste)
+            }
+        }
+
+        /// Solicita o confirma la cancelación de una orden.
+        ///
+        /// Este método implementa una cancelación en dos pasos:
+        /// 1. La primera llamada solicita la cancelación.
+        /// 2. La segunda llamada, realizada por la otra parte, confirma la cancelación.
+        ///
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'id_orden': identificador único de la orden.
+        ///
+        /// # Retorna
+        /// - 'Ok(())' si la solicitud o confirmación fue válida.
+        /// - 'Err(ErrorMarketplace)' si ocurre un error.
+        #[ink(message)]
+        pub fn gestionar_cancelacion_orden(
+            &mut self,
+            id_orden: u32,
+        ) -> Result<(), ErrorMarketplace> {
+            let caller = self.env().caller();
+            self._gestionar_cancelacion_orden(caller, id_orden)
+        }
     }
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
     /// module and test functions are marked with a `#[test]` attribute.
@@ -1581,6 +1697,90 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::NoEsComprador));
         }
 
+        #[test]
+        fn test_orden_cancelacion_solicitud_comprador() {
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(1, comprador, vendedor, 10, 3, 300);
+
+            let res = orden.gestionar_cancelacion(comprador);
+            assert_eq!(res, Ok(()));
+
+            assert!(orden.pendiente_cancelacion);
+            assert_eq!(orden.cancelacion_solicitada_por, Some(Rol::Comprador));
+            assert_eq!(orden.estado, EstadoOrden::Pendiente);
+        }
+
+        #[test]
+        fn test_orden_cancelacion_confirmacion_por_vendedor() {
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(1, comprador, vendedor, 10, 3, 300);
+
+            // Comprador solicita
+            assert_eq!(orden.gestionar_cancelacion(comprador), Ok(()));
+
+            // Vendedor confirma
+            let res = orden.gestionar_cancelacion(vendedor);
+            assert_eq!(res, Ok(()));
+
+            assert_eq!(orden.estado, EstadoOrden::Cancelada);
+            assert!(!orden.pendiente_cancelacion);
+            assert_eq!(orden.cancelacion_solicitada_por, None);
+        }
+
+        #[test]
+        fn test_orden_cancelacion_no_autorizado() {
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+
+            let res = orden.gestionar_cancelacion(account(3));
+            assert_eq!(res, Err(ErrorMarketplace::NoAutorizado));
+        }
+
+        #[test]
+        fn test_orden_cancelacion_doble_solicitud_mismo_usuario() {
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(1, comprador, vendedor, 10, 3, 300);
+
+            assert_eq!(orden.gestionar_cancelacion(comprador), Ok(()));
+            let res = orden.gestionar_cancelacion(comprador);
+
+            assert_eq!(res, Err(ErrorMarketplace::CancelacionYaPendiente));
+        }
+
+        #[test]
+        fn test_orden_cancelacion_orden_ya_cancelada() {
+            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            orden.estado = EstadoOrden::Cancelada;
+
+            let res = orden.gestionar_cancelacion(account(1));
+            assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
+        }
+
+        #[test]
+        fn test_cancelacion_solicitud_iniciada_por_vendedor_en_orden() {
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(1, comprador, vendedor, 10, 2, 200);
+
+            // Vendedor intenta iniciar la cancelación
+            let res = orden.gestionar_cancelacion(vendedor);
+
+            // Debe fallar porque solo el comprador puede iniciar
+            assert_eq!(res, Err(ErrorMarketplace::NoEsComprador));
+
+            // La orden no cambia
+            assert!(!orden.pendiente_cancelacion);
+            assert_eq!(orden.cancelacion_solicitada_por, None);
+            assert_eq!(orden.estado, EstadoOrden::Pendiente);
+        }
+
+        // Test del contrato market_place
         #[ink::test]
         fn test_marcar_orden_como_enviada_ok() {
             let mut contrato = contract_dummy();
@@ -1672,6 +1872,114 @@ mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
         }
 
+        #[ink::test]
+        fn test_cancelacion_solicitada_queda_pendiente() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 2, 200);
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._gestionar_cancelacion_orden(account(1), 1);
+            assert_eq!(res, Ok(()));
+
+            if let Some(actualizada) = contrato.ordenes.get(1) {
+                assert_eq!(actualizada.pendiente_cancelacion, true);
+                assert_eq!(actualizada.cancelacion_solicitada_por, Some(Rol::Comprador));
+                assert_eq!(actualizada.estado, EstadoOrden::Pendiente);
+            } else {
+                assert!(false);
+            }
+        }
+
+        #[ink::test]
+        fn test_cancelacion_confirmada_por_ambos_roles() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 2, 200);
+            contrato.ordenes.insert(1, &orden);
+
+            // Comprador solicita
+            let _ = contrato._gestionar_cancelacion_orden(account(1), 1);
+
+            // Vendedor confirma
+            let res = contrato._gestionar_cancelacion_orden(account(2), 1);
+            assert_eq!(res, Ok(()));
+
+            if let Some(actualizada) = contrato.ordenes.get(1) {
+                assert_eq!(actualizada.estado, EstadoOrden::Cancelada);
+                assert_eq!(actualizada.pendiente_cancelacion, false);
+                assert_eq!(actualizada.cancelacion_solicitada_por, None);
+            } else {
+                assert!(false);
+            }
+        }
+
+        #[ink::test]
+        fn test_cancelacion_repetida_por_mismo_usuario() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 2, 200);
+            contrato.ordenes.insert(1, &orden);
+
+            let _ = contrato._gestionar_cancelacion_orden(account(1), 1);
+
+            let res = contrato._gestionar_cancelacion_orden(account(1), 1);
+            assert_eq!(res, Err(ErrorMarketplace::CancelacionYaPendiente));
+        }
+
+        #[ink::test]
+        fn test_cancelacion_no_autorizado() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 2, 200);
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._gestionar_cancelacion_orden(account(4), 1);
+            assert_eq!(res, Err(ErrorMarketplace::NoAutorizado));
+        }
+
+        #[ink::test]
+        fn test_cancelacion_orden_no_existe() {
+            let mut contrato = contract_dummy();
+
+            let res = contrato._gestionar_cancelacion_orden(account(1), 999);
+            assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
+        }
+
+        #[ink::test]
+        fn test_cancelacion_orden_ya_cancelada() {
+            let mut contrato = contract_dummy();
+
+            let mut orden = Orden::new(1, account(1), account(2), 10, 2, 200);
+            orden.estado = EstadoOrden::Cancelada;
+            contrato.ordenes.insert(1, &orden);
+
+            let res = contrato._gestionar_cancelacion_orden(account(1), 1);
+            assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
+        }
+        #[ink::test]
+        fn test_cancelacion_solicitud_iniciada_por_vendedor() {
+            let mut contrato = contract_dummy();
+
+            let orden = Orden::new(1, account(1), account(2), 10, 2, 200);
+            contrato.ordenes.insert(1, &orden);
+
+            // Vendedor intenta iniciar la cancelación
+            let res = contrato._gestionar_cancelacion_orden(account(2), 1);
+
+            // Debe fallar porque solo el comprador puede iniciar
+            assert_eq!(res, Err(ErrorMarketplace::NoEsComprador));
+
+            // La orden no cambia
+            if let Some(actualizada) = contrato.ordenes.get(1) {
+                assert!(!actualizada.pendiente_cancelacion);
+                assert_eq!(actualizada.cancelacion_solicitada_por, None);
+                assert_eq!(actualizada.estado, EstadoOrden::Pendiente);
+            } else {
+                assert!(false);
+            }
+        }
+
         /// Test MarketPlace
         #[ink::test]
         fn registrar_usuario_ok() {
@@ -1702,15 +2010,6 @@ mod market_place {
             assert_eq!(res, Ok(()));
         }
 
-        #[ink::test]
-        fn modificar_rol_igual_falla() {
-            let mut contrato = nuevo_contrato();
-            set_caller(account(3));
-            let _ = contrato.registrar_usuario("luis".to_string(), Rol::Vendedor);
-            let id_vendedor = account(3);
-            let res = contrato._modificar_rol(id_vendedor, Rol::Vendedor);
-            assert_eq!(res, Err(ErrorMarketplace::RolYaAsignado));
-        }
         #[ink::test]
         fn registro_producto_ok() {
             let mut contract = contract_dummy();
@@ -1825,6 +2124,7 @@ mod market_place {
             );
             assert_eq!(res, Err(ErrorMarketplace::ProductoYaPoseeDeposito));
         }
+
         #[ink::test]
         fn crear_publicacion_ok() {
             let mut contract = contract_dummy();
@@ -1867,13 +2167,122 @@ mod market_place {
                 panic!("La publicación no fue insertada en el mapping");
             }
 
-            // Verifica que el stock fue actualizado
-            if let Some(deposito_actualizado) =
-                contract.stock_general.get(&(id_vendedor, id_producto))
-            {
-                assert_eq!(deposito_actualizado.stock, stock_inicial - stock_a_vender);
+            // verificar que el stock del depósito NO cambia
+            let deposito = contract
+                .stock_general
+                .get(&(id_vendedor, id_producto))
+                .expect("El depósito debe existir");
+
+            assert_eq!(deposito.stock, stock_inicial);
+        }
+        #[ink::test]
+        fn crear_orden_valida() {
+            let mut contrato = contract_dummy();
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let producto = Producto::new(
+                1,
+                "Ropa".to_string(),
+                "Descripcion de la ropa".to_string(),
+                Categoria::Indumentaria,
+            );
+
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
+
+            contrato.publicaciones.insert(0, &publicacion);
+
+            let deposito = Deposito::new(producto.id_producto, vendedor, 10);
+
+            contrato
+                .stock_general
+                .insert((vendedor, producto.id_producto), &deposito);
+
+            let result = contrato._crear_orden(comprador, 0, 2, 500);
+            assert!(result.is_ok());
+
+            match contrato.ordenes.get(&0) {
+                Some(orden) => {
+                    assert_eq!(orden.id, 0);
+                    assert_eq!(orden.comprador, comprador);
+                    assert_eq!(orden.vendedor, vendedor);
+                    assert_eq!(orden.total, 400); // 200 * 2
+                }
+                None => panic!("La orden no fue creada correctamente"),
+            }
+
+            // Verificar stock actualizado
+            let deposito_actualizado = contrato
+                .stock_general
+                .get(&(vendedor, producto.id_producto))
+                .unwrap();
+
+            assert_eq!(deposito_actualizado.stock, 8);
+        }
+        #[ink::test]
+        fn test_overflow_contador_ordenes() {
+            let mut contrato = contract_dummy();
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            contrato.contador_ordenes = u32::MAX;
+
+            let producto = Producto::new(
+                1,
+                "Ropa".to_string(),
+                "Descripcion de la ropa".to_string(),
+                Categoria::Indumentaria,
+            );
+
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
+
+            contrato.publicaciones.insert(0, &publicacion);
+
+            let deposito = Deposito::new(producto.id_producto, vendedor, 10);
+
+            contrato
+                .stock_general
+                .insert((vendedor, producto.id_producto), &deposito);
+
+            let result = contrato._crear_orden(comprador, 0, 2, 500);
+
+            assert_eq!(result, Err(ErrorMarketplace::Overflow));
+        }
+
+        #[ink::test]
+        fn modificar_rol_ya_asignado() {
+            let mut contrato = nuevo_contrato();
+            set_caller(account(2));
+            let _ = contrato.registrar_usuario("luis".to_string(), Rol::Ambos);
+            let id_usuario = account(2);
+            let res = contrato._modificar_rol(id_usuario, Rol::Ambos);
+            assert_eq!(res, Err(ErrorMarketplace::RolYaAsignado));
+        }
+
+        #[ink::test]
+        fn modificar_rol_cambio_no_permitido() {
+            let mut contrato = nuevo_contrato();
+            set_caller(account(3));
+            let _ = contrato.registrar_usuario("luis".to_string(), Rol::Vendedor);
+            let id_usuario = account(3);
+            let res = contrato._modificar_rol(id_usuario, Rol::Comprador);
+            assert_eq!(res, Err(ErrorMarketplace::CambioRolNoPermitido));
+        }
+
+        #[ink::test]
+        fn modificar_rol_cambio_permitido() {
+            let mut contrato = nuevo_contrato();
+            set_caller(account(3));
+            let _ = contrato.registrar_usuario("luis".to_string(), Rol::Ambos);
+            let id_usuario = account(3);
+
+            let res = contrato._modificar_rol(id_usuario, Rol::Comprador);
+            assert_eq!(res, Ok(()));
+
+            if let Some(usuario) = contrato.usuarios.get(&id_usuario) {
+                assert_eq!(usuario.rol, Rol::Comprador);
             } else {
-                panic!("El depósito no fue actualizado");
+                panic!("Usuario no encontrado");
             }
         }
 
@@ -2500,60 +2909,6 @@ mod market_place {
 
             let result = contrato._crear_orden(comprador, 0, 2, 150); // Se espera 400
             assert_eq!(result, Err(ErrorMarketplace::MontoInsuficiente));
-        }
-
-        #[ink::test]
-        fn crear_orden_valida() {
-            let mut contrato = contract_dummy();
-            let comprador = account(1);
-            let vendedor = account(2);
-
-            let producto = Producto::new(
-                1,
-                "Ropa".to_string(),
-                "Descripcion de la ropa".to_string(),
-                Categoria::Indumentaria,
-            );
-
-            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
-
-            contrato.publicaciones.insert(0, &publicacion);
-
-            let result = contrato._crear_orden(comprador, 0, 2, 500);
-            assert!(result.is_ok());
-
-            match contrato.ordenes.get(&0) {
-                Some(orden) => {
-                    assert_eq!(orden.id, 0);
-                    assert_eq!(orden.comprador, comprador);
-                    assert_eq!(orden.vendedor, vendedor);
-                    assert_eq!(orden.total, 400); // 200 * 2
-                }
-                None => panic!("La orden no fue creada correctamente"),
-            }
-        }
-
-        #[ink::test]
-        fn test_overflow_contador_ordenes() {
-            let mut contrato = contract_dummy();
-            let comprador = account(1);
-            let vendedor = account(2);
-
-            contrato.contador_ordenes = u32::MAX;
-
-            let producto = Producto::new(
-                1,
-                "Ropa".to_string(),
-                "Descripcion de la ropa".to_string(),
-                Categoria::Indumentaria,
-            );
-
-            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
-
-            contrato.publicaciones.insert(0, &publicacion);
-            let result = contrato._crear_orden(comprador, 0, 2, 500);
-
-            assert_eq!(result, Err(ErrorMarketplace::Overflow));
         }
     }
 }
