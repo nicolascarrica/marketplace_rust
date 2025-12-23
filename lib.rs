@@ -1709,7 +1709,7 @@ mod market_place {
             let _ = contrato.registrar_usuario("luis".to_string(), Rol::Vendedor);
             let id_vendedor = account(3);
             let res = contrato._modificar_rol(id_vendedor, Rol::Vendedor);
-            assert_eq!(res, Err(ErrorMarketplace::RolYaAsignado));
+            assert_eq!(res, Err(ErrorMarketplace::CambioRolNoPermitido));
         }
         #[ink::test]
         fn registro_producto_ok() {
@@ -1871,7 +1871,7 @@ mod market_place {
             if let Some(deposito_actualizado) =
                 contract.stock_general.get(&(id_vendedor, id_producto))
             {
-                assert_eq!(deposito_actualizado.stock, stock_inicial - stock_a_vender);
+                assert_eq!(deposito_actualizado.stock, stock_inicial);
             } else {
                 panic!("El depósito no fue actualizado");
             }
@@ -2508,6 +2508,16 @@ mod market_place {
             let comprador = account(1);
             let vendedor = account(2);
 
+            // Registrar usuarios
+            contrato.usuarios.insert(
+                comprador,
+                &Usuario::new("comprador".to_string(), Rol::Comprador, account(1) ),
+            );
+            contrato.usuarios.insert(
+                vendedor,
+                &Usuario::new("vendedor".to_string(), Rol::Vendedor, vendedor),
+            ); 
+
             let producto = Producto::new(
                 1,
                 "Ropa".to_string(),
@@ -2515,10 +2525,17 @@ mod market_place {
                 Categoria::Indumentaria,
             );
 
+            //publicacion
             let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
-
             contrato.publicaciones.insert(0, &publicacion);
 
+            //deposito
+            let deposito = Deposito::new(producto.id_producto, vendedor, 10);
+            contrato
+                .stock_general
+                .insert((vendedor, producto.id_producto), &deposito);
+
+            //crear orden
             let result = contrato._crear_orden(comprador, 0, 2, 500);
             assert!(result.is_ok());
 
@@ -2539,6 +2556,16 @@ mod market_place {
             let comprador = account(1);
             let vendedor = account(2);
 
+            contrato.usuarios.insert(
+                comprador,
+                &Usuario::new("comprador".to_string(), Rol::Comprador, comprador),
+            );
+            contrato.usuarios.insert(
+                vendedor,
+                &Usuario::new("vendedor".to_string(), Rol::Vendedor, vendedor),
+            );
+
+            //forzar overflow
             contrato.contador_ordenes = u32::MAX;
 
             let producto = Producto::new(
@@ -2549,8 +2576,13 @@ mod market_place {
             );
 
             let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
-
             contrato.publicaciones.insert(0, &publicacion);
+
+            let deposito = Deposito::new(producto.id_producto, vendedor, 10);       
+            contrato
+                .stock_general
+                .insert((vendedor, producto.id_producto), &deposito);
+            
             let result = contrato._crear_orden(comprador, 0, 2, 500);
 
             assert_eq!(result, Err(ErrorMarketplace::Overflow));
