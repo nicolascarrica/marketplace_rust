@@ -1658,7 +1658,15 @@ mod market_place {
             self._gestionar_cancelacion_orden(caller, id_orden)
         }
 
-
+        /// Registra una calificación para una orden completada.
+        /// 
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'id_orden: u32': identificador único de la orden a calificar.
+        /// - 'calificacion: u8': calificación otorgada (de 1 a 5).
+        /// # Retorna
+        /// - 'Ok(())' si la calificación fue registrada exitosamente.
+        /// - 'Err(ErrorMarketplace)' si ocurre un error en la validación o actualización.
         #[ink(message)]
         pub fn registrar_calificacion(&mut self, id_orden: u32, calificacion: u8) -> Result<(), ErrorMarketplace> {
             if !(1..=5).contains(&calificacion) {
@@ -1725,6 +1733,13 @@ mod market_place {
             Ok(())
         }
 
+        /// Obtiene la reputación promedio de un vendedor.
+        /// # Parámetros
+        /// - '&self': referencia al Marketplace.
+        /// - 'cuenta: AccountId': cuenta del vendedor.
+        /// # Retorna
+        /// - 'u32': reputación promedio del vendedor.
+        /// - Retorna 0 si el vendedor no tiene calificaciones.
         #[ink(message)]
         pub fn obtener_reputacion_vendedor(&self, cuenta: AccountId) -> u32 {
             if let Some((suma, cantidad)) = self.reputacion_como_vendedor.get(cuenta) {
@@ -1733,7 +1748,13 @@ mod market_place {
                 0
             }
         }
-
+        /// Obtiene la reputación promedio de un comprador.
+        /// # Parámetros
+        /// - '&self': referencia al Marketplace.
+        /// - 'cuenta: AccountId': cuenta del comprador.
+        /// # Retorna
+        /// - 'u32': reputación promedio del comprador.
+        /// - Retorna 0 si el comprador no tiene calificaciones.
         #[ink(message)]
         pub fn obtener_reputacion_comprador(&self, cuenta: AccountId) -> u32 {
             if let Some((suma, cantidad)) = self.reputacion_como_comprador.get(cuenta) {
@@ -3261,6 +3282,92 @@ mod market_place {
 
             assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
         }
+
+        #[ink::test]
+        fn test_obtener_reputacion_vendedor_sin_calificaciones() {
+            let contrato = contract_dummy();
+        
+            let vendedor = account(1);
+        
+            let reputacion = contrato.obtener_reputacion_vendedor(vendedor);
+        
+            assert_eq!(reputacion, 0);
+        }
+
+        #[ink::test]
+        fn test_obtener_reputacion_vendedor_una_calificacion() {
+            let mut contrato = contract_dummy();
+        
+            let vendedor = account(1);
+        
+            // suma = 4, cantidad = 1
+            contrato
+                .reputacion_como_vendedor
+                .insert(vendedor, &(4, 1));
+        
+            let reputacion = contrato.obtener_reputacion_vendedor(vendedor);
+        
+            assert_eq!(reputacion, 4);
+        }
+
+        #[ink::test]
+        fn test_obtener_reputacion_vendedor_varias_calificaciones() {
+            let mut contrato = contract_dummy();
+        
+            let vendedor = account(1);
+        
+            // (4 + 5 + 3) / 3 = 4
+            contrato
+                .reputacion_como_vendedor
+                .insert(vendedor, &(12, 3));
+        
+            let reputacion = contrato.obtener_reputacion_vendedor(vendedor);
+        
+            assert_eq!(reputacion, 4);
+        }
+
+        #[ink::test]
+        fn test_obtener_reputacion_comprador_sin_calificaciones() {
+            let contrato = contract_dummy();
+        
+            let comprador = account(2);
+        
+            let reputacion = contrato.obtener_reputacion_comprador(comprador);
+        
+            assert_eq!(reputacion, 0);
+        }
+
+        #[ink::test]
+        fn test_obtener_reputacion_comprador_una_calificacion() {
+            let mut contrato = contract_dummy();
+        
+            let comprador = account(2);
+        
+            contrato
+                .reputacion_como_comprador
+                .insert(comprador, &(5, 1));
+        
+            let reputacion = contrato.obtener_reputacion_comprador(comprador);
+        
+            assert_eq!(reputacion, 5);
+        }
+
+        #[ink::test]
+        fn test_obtener_reputacion_comprador_varias_calificaciones() {
+            let mut contrato = contract_dummy();
+        
+            let comprador = account(2);
+        
+            // (2 + 4) / 2 = 3
+            contrato
+                .reputacion_como_comprador
+                .insert(comprador, &(6, 2));
+        
+            let reputacion = contrato.obtener_reputacion_comprador(comprador);
+        
+            assert_eq!(reputacion, 3);
+        }
+
     }
 }
 
