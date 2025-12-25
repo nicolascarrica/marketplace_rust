@@ -15,13 +15,15 @@ scale-info = { version = "2.10", default-features = false, features = [
 ] }
 
 [dev-dependencies]
-ink_e2e = { version = "5.0.0" }
+ink_e2e = { version = "5.1.1" }
 
 [lib]
 path = "lib.rs"
 
 [features]
 default = ["std"]
-std = ["ink/std"]
+std = [    "ink/std",
+    "parity-scale-codec/std",
+    "scale-info/std",]
 ink-as-dependency = []
 e2e-tests = []

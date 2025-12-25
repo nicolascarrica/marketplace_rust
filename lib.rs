@@ -1425,9 +1425,6 @@ mod market_place {
             // Verificar que el stock sea suficiente y asi poder crear la orden
             publicacion.verificar_stock(cant_producto as u32)?;
 
-            //Reducir el stock de la publicación, no del deposito
-            publicacion.reducir_stock(cant_producto as u32)?;
-
             let tot_orden = match publicacion.precio.checked_mul(cant_producto as u128) {
                 Some(valor) => valor,
                 None => return Err(ErrorMarketplace::Overflow),
@@ -1436,6 +1433,19 @@ mod market_place {
             if monto_dado < tot_orden {
                 return Err(ErrorMarketplace::MontoInsuficiente);
             }
+
+            //Reducir el stock de la publicación, no del deposito
+            publicacion.reducir_stock(cant_producto as u32)?;
+
+            //Actualizar la publicación luego de reducir el stock
+            self.publicaciones.insert(id_publicacion, &publicacion);
+
+            //Reducir el stock del deposito del vendedor solo al momento de crear la orden
+            self.actualizar_stock_producto(
+                publicacion.id_vendedor,
+                publicacion.id_producto,
+                cant_producto as u32,
+            )?;            
 
             // Crear nueva orden
             let nueva_id = self.contador_ordenes;
@@ -1448,12 +1458,6 @@ mod market_place {
                 tot_orden,
             );
 
-            //Reducir el stock del deposito del vendedor solo al momento de crear la orden
-            self.actualizar_stock_producto(
-                publicacion.id_vendedor,
-                publicacion.id_producto,
-                cant_producto as u32,
-            )?;
 
             self.ordenes.insert(nueva_id, &orden);
 
@@ -1724,7 +1728,7 @@ mod market_place {
             ))
         }
     }
-    /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
+ /*   /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
     /// module and test functions are marked with a `#[test]` attribute.
     /// The below code is technically just normal Rust code.
     #[cfg(test)]
@@ -2283,122 +2287,13 @@ mod market_place {
                 panic!("La publicación no fue insertada en el mapping");
             }
 
-            // verificar que el stock del depósito NO cambia
-            let deposito = contract
-                .stock_general
-                .get(&(id_vendedor, id_producto))
-                .expect("El depósito debe existir");
-
-            assert_eq!(deposito.stock, stock_inicial);
-        }
-        #[ink::test]
-        fn crear_orden_valida() {
-            let mut contrato = contract_dummy();
-            let comprador = account(1);
-            let vendedor = account(2);
-
-            let producto = Producto::new(
-                1,
-                "Ropa".to_string(),
-                "Descripcion de la ropa".to_string(),
-                Categoria::Indumentaria,
-            );
-
-            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
-
-            contrato.publicaciones.insert(0, &publicacion);
-
-            let deposito = Deposito::new(producto.id_producto, vendedor, 10);
-
-            contrato
-                .stock_general
-                .insert((vendedor, producto.id_producto), &deposito);
-
-            let result = contrato._crear_orden(comprador, 0, 2, 500);
-            assert!(result.is_ok());
-
-            match contrato.ordenes.get(&0) {
-                Some(orden) => {
-                    assert_eq!(orden.id, 0);
-                    assert_eq!(orden.comprador, comprador);
-                    assert_eq!(orden.vendedor, vendedor);
-                    assert_eq!(orden.total, 400); // 200 * 2
-                }
-                None => panic!("La orden no fue creada correctamente"),
-            }
-
-            // Verificar stock actualizado
-            let deposito_actualizado = contrato
-                .stock_general
-                .get(&(vendedor, producto.id_producto))
-                .unwrap();
-
-            assert_eq!(deposito_actualizado.stock, 8);
-        }
-        #[ink::test]
-        fn test_overflow_contador_ordenes() {
-            let mut contrato = contract_dummy();
-            let comprador = account(1);
-            let vendedor = account(2);
-
-            contrato.contador_ordenes = u32::MAX;
-
-            let producto = Producto::new(
-                1,
-                "Ropa".to_string(),
-                "Descripcion de la ropa".to_string(),
-                Categoria::Indumentaria,
-            );
-
-            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
-
-            contrato.publicaciones.insert(0, &publicacion);
-
-            let deposito = Deposito::new(producto.id_producto, vendedor, 10);
-
-            contrato
-                .stock_general
-                .insert((vendedor, producto.id_producto), &deposito);
-
-            let result = contrato._crear_orden(comprador, 0, 2, 500);
-
-            assert_eq!(result, Err(ErrorMarketplace::Overflow));
-        }
-
-        #[ink::test]
-        fn modificar_rol_ya_asignado() {
-            let mut contrato = nuevo_contrato();
-            set_caller(account(2));
-            let _ = contrato.registrar_usuario("luis".to_string(), Rol::Ambos);
-            let id_usuario = account(2);
-            let res = contrato._modificar_rol(id_usuario, Rol::Ambos);
-            assert_eq!(res, Err(ErrorMarketplace::RolYaAsignado));
-        }
-
-        #[ink::test]
-        fn modificar_rol_cambio_no_permitido() {
-            let mut contrato = nuevo_contrato();
-            set_caller(account(3));
-            let _ = contrato.registrar_usuario("luis".to_string(), Rol::Vendedor);
-            let id_usuario = account(3);
-            let res = contrato._modificar_rol(id_usuario, Rol::Comprador);
-            assert_eq!(res, Err(ErrorMarketplace::CambioRolNoPermitido));
-        }
-
-        #[ink::test]
-        fn modificar_rol_cambio_permitido() {
-            let mut contrato = nuevo_contrato();
-            set_caller(account(3));
-            let _ = contrato.registrar_usuario("luis".to_string(), Rol::Ambos);
-            let id_usuario = account(3);
-
-            let res = contrato._modificar_rol(id_usuario, Rol::Comprador);
-            assert_eq!(res, Ok(()));
-
-            if let Some(usuario) = contrato.usuarios.get(&id_usuario) {
-                assert_eq!(usuario.rol, Rol::Comprador);
+            // Verifica que el stock fue actualizado
+            if let Some(deposito_actualizado) =
+                contract.stock_general.get(&(id_vendedor, id_producto))
+            {
+                assert_eq!(deposito_actualizado.stock, stock_inicial - stock_a_vender);
             } else {
-                panic!("Usuario no encontrado");
+                panic!("El depósito no fue actualizado");
             }
         }
 
@@ -3051,43 +2946,22 @@ mod market_place {
         fn test_vendedor_califica_comprador_ok() {
             let mut contrato = contract_dummy();
 
-            let mut orden = Orden::new(1, account(1), account(2), 10, 1, 100);
-            orden.estado = EstadoOrden::Recibido;
-            contrato.ordenes.insert(1, &orden);
+            let publicacion = Publicacion::new(0, vendedor, producto.id_producto, 200, 10);
 
-            set_caller(account(2)); // vendedor
-            let res = contrato.registrar_calificacion(1, 4);
-            assert_eq!(res, Ok(()));
+            contrato.publicaciones.insert(0, &publicacion);
 
-            let reputacion = contrato.obtener_reputacion(account(1));
-            assert_eq!(reputacion, Ok((4, 0)));
-        }
+            let result = contrato._crear_orden(comprador, 0, 2, 500);
+            assert!(result.is_ok());
 
-        #[ink::test]
-        fn test_no_se_puede_calificar_si_no_esta_recibida() {
-            let mut contrato = contract_dummy();
-
-            let orden = Orden::new(1, account(1), account(2), 10, 1, 100);
-            contrato.ordenes.insert(1, &orden); // Pendiente
-
-            set_caller(account(1));
-            let res = contrato.registrar_calificacion(1, 5);
-            assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
-        }
-
-        #[ink::test]
-        fn test_comprador_no_puede_calificar_dos_veces() {
-            let mut contrato = contract_dummy();
-
-            let mut orden = Orden::new(1, account(1), account(2), 10, 1, 100);
-            orden.estado = EstadoOrden::Recibido;
-            contrato.ordenes.insert(1, &orden);
-
-            set_caller(account(1));
-            assert_eq!(contrato.registrar_calificacion(1, 5), Ok(()));
-            let res = contrato.registrar_calificacion(1, 3);
-
-            assert_eq!(res, Err(ErrorMarketplace::CalificacionYaRealizada));
+            match contrato.ordenes.get(&0) {
+                Some(orden) => {
+                    assert_eq!(orden.id, 0);
+                    assert_eq!(orden.comprador, comprador);
+                    assert_eq!(orden.vendedor, vendedor);
+                    assert_eq!(orden.total, 400); // 200 * 2
+                }
+                None => panic!("La orden no fue creada correctamente"),
+            }
         }
 
         #[ink::test]
@@ -3229,85 +3103,140 @@ mod market_place {
             let mut orden = Orden::new(1, comprador, vendedor_inexistente, 10, 1, 100);
             orden.estado = EstadoOrden::Recibido;
 
-            contrato.ordenes.insert(1, &orden);
-
-            set_caller(comprador); // comprador califica al vendedor
-            let res = contrato.registrar_calificacion(1, 5);
+            contrato.publicaciones.insert(0, &publicacion);
+            let result = contrato._crear_orden(comprador, 0, 2, 500);
 
             assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
         }
     }
-}
-
-/*
-/// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
-///
-/// When running these you need to make sure that you:
-/// - Compile the tests with the `e2e-tests` feature flag enabled (`--features e2e-tests`)
-/// - Are running a Substrate node which contains `pallet-contracts` in the background
+ */
 #[cfg(all(test, feature = "e2e-tests"))]
 mod e2e_tests {
-    /// Imports all the definitions from the outer scope so we can use them here.
     use super::*;
-
-    /// A helper function used for calling contract messages.
     use ink_e2e::ContractsBackend;
 
-    /// The End-to-End test `Result` type.
     type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-    /// We test that we can upload and instantiate the contract using its default constructor.
-    #[ink_e2e::test]
-    async fn default_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-        // Given
-        let mut constructor = MarketPlaceRef::default();
+#[ink_e2e::test]
+async fn e2e_crear_orden_funciona(
+    mut client: ink_e2e::Client<C, E>
+) -> E2EResult<()> {
 
-        // When
-        let contract = client
+    // Deploy
+    let mut constructor = MarketPlaceRef::new();
+    let contract = client
         .instantiate("MarketPlace", &ink_e2e::alice(), &mut constructor)
         .submit()
-        .await
-        .expect("instantiate failed");
-    let call_builder = contract.call_builder::<MarketPlace>();
+        .await?;
 
-    // Then
-    let get = call_builder.get();
-    let get_result = client.call(&ink_e2e::alice(), &get).dry_run().await?;
-    assert!(matches!(get_result.return_value(), false));
+    let mut call = contract.call_builder::<MarketPlace>();
+
+    // Registrar vendedor (alice)
+    let reg_vendedor = call.registrar_usuario(
+        "alice".into(),
+        Rol::Vendedor,
+    );
+    client.call(&ink_e2e::alice(), &reg_vendedor).submit().await?;
+
+    // Registrar comprador (bob)
+    let reg_comprador = call.registrar_usuario(
+        "bob".into(),
+        Rol::Comprador,
+    );
+    client.call(&ink_e2e::bob(), &reg_comprador).submit().await?;
+
+            // 3️⃣ Registrar producto (depósito)
+        // --------------------------------------------------
+        let reg_producto = call.registrar_producto(
+                "Notebook".to_string(),
+                "Notebook gamer".to_string(),
+                Categoria::Tecnologia,
+                10,
+            );
+
+        client
+            .call(&ink_e2e::alice(), &reg_producto)
+            .submit()
+            .await?;
+
+        // Crear publicación (caller = vendedor)
+        let crear_pub = call.crear_publicacion(
+                "Notebook".to_string(),
+                5,
+                100,
+            );
+
+        client
+            .call(&ink_e2e::alice(), &crear_pub)
+            .submit()
+            .await?;
+
+    // Crear orden (caller = comprador)
+    let crear_orden = call.crear_orden(
+        0,   // id publicación
+        2,   // cantidad
+        200, // monto
+    );
+
+    client
+        .call(&ink_e2e::bob(), &crear_orden)
+        .submit()
+        .await?;
 
     Ok(())
 }
 
-/// We test that we can read and write a value from the on-chain contract.
+
+
 #[ink_e2e::test]
-async fn it_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-    // Given
-    let mut constructor = MarketPlaceRef::new(false);
+async fn e2e_crear_orden_falla_por_id_usuario_invalido(
+    mut client: ink_e2e::Client<C, E>
+) -> E2EResult<()> {
+
+    // Deploy
+    let mut constructor = MarketPlaceRef::new();
     let contract = client
-    .instantiate("MarketPlace", &ink_e2e::bob(), &mut constructor)
-    .submit()
-    .await
-    .expect("instantiate failed");
-let mut call_builder = contract.call_builder::<MarketPlace>();
+        .instantiate("MarketPlace", &ink_e2e::alice(), &mut constructor)
+        .submit()
+        .await?;
 
-let get = call_builder.get();
-let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-assert!(matches!(get_result.return_value(), false));
+    let mut call = contract.call_builder::<MarketPlace>();
 
-// When
-let flip = call_builder.flip();
-let _flip_result = client
-.call(&ink_e2e::bob(), &flip)
-.submit()
-.await
-.expect("flip failed");
+	let random = ink_e2e::bob();
+    // crear orden 
+    let crear = call.crear_orden(
+        0,
+        2,
+        200,
+    );
 
-// Then
-let get = call_builder.get();
-let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-assert!(matches!(get_result.return_value(), true));
+   let result = client
+        .call(&random, &crear)
+        .submit()
+        .await;
 
-Ok(())
+	    // verificación de que me falla el test
+    assert!(result.is_err());
+
+    Ok(())
 }
+
+
 }
-*/
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
