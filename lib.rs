@@ -203,14 +203,24 @@ mod market_place {
             }
         }
 
-        fn sumar_reputacion_como_comprador(&mut self, valor: u8) {
-            self.reputacion_como_comprador += valor as u32;
-            self.cantidad_calificaciones_como_comprador += 1;
+        fn sumar_reputacion_como_comprador(&mut self, valor: u8) -> Result<(), ErrorMarketplace> {
+            self.reputacion_como_comprador = self
+    .reputacion_como_comprador
+    .checked_add(valor as u32)
+    .ok_or(ErrorMarketplace::Overflow)?;
+
+            self.cantidad_calificaciones_como_comprador = self.cantidad_calificaciones_como_comprador
+                .checked_add(1)
+                .ok_or(ErrorMarketplace::Overflow)?;
+            Ok(())
         }
 
-        fn sumar_reputacion_como_vendedor(&mut self, valor: u8) {
-            self.reputacion_como_vendedor += valor as u32;
-            self.cantidad_calificaciones_como_vendedor += 1;
+        fn sumar_reputacion_como_vendedor(&mut self, valor: u8) -> Result<(), ErrorMarketplace> {
+            self.reputacion_como_vendedor = self.reputacion_como_vendedor.checked_add(valor as u32).ok_or(ErrorMarketplace::Overflow)?;
+            self.cantidad_calificaciones_como_vendedor = self.cantidad_calificaciones_como_vendedor
+                .checked_add(1)
+                .ok_or(ErrorMarketplace::Overflow)?;
+            Ok(())
         }
     }
 
@@ -1685,7 +1695,7 @@ mod market_place {
                         Some(u) => u,
                         None => return Err(ErrorMarketplace::UsuarioNoExiste),
                     };
-                    comprador.sumar_reputacion_como_comprador(calificacion);
+                    comprador.sumar_reputacion_como_comprador(calificacion)?;
                     self.usuarios.insert(orden.comprador, &comprador);
                 }
 
@@ -1694,7 +1704,7 @@ mod market_place {
                         Some(u) => u,
                         None => return Err(ErrorMarketplace::UsuarioNoExiste),
                     };
-                    vendedor.sumar_reputacion_como_vendedor(calificacion);
+                    vendedor.sumar_reputacion_como_vendedor(calificacion)?;
                     self.usuarios.insert(orden.vendedor, &vendedor);
                 }
                 Rol::Ambos => {
