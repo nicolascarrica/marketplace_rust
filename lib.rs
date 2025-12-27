@@ -195,25 +195,6 @@ mod market_place {
             }
         }
 
-        fn sumar_reputacion_como_comprador(&mut self, valor: u8) -> Result<(), ErrorMarketplace> {
-            self.reputacion_como_comprador = self
-    .reputacion_como_comprador
-    .checked_add(valor as u32)
-    .ok_or(ErrorMarketplace::Overflow)?;
-
-            self.cantidad_calificaciones_como_comprador = self.cantidad_calificaciones_como_comprador
-                .checked_add(1)
-                .ok_or(ErrorMarketplace::Overflow)?;
-            Ok(())
-        }
-
-        fn sumar_reputacion_como_vendedor(&mut self, valor: u8) -> Result<(), ErrorMarketplace> {
-            self.reputacion_como_vendedor = self.reputacion_como_vendedor.checked_add(valor as u32).ok_or(ErrorMarketplace::Overflow)?;
-            self.cantidad_calificaciones_como_vendedor = self.cantidad_calificaciones_como_vendedor
-                .checked_add(1)
-                .ok_or(ErrorMarketplace::Overflow)?;
-            Ok(())
-        }
     }
 
     /// Representa un producto en el marketplace.
@@ -1678,87 +1659,80 @@ mod market_place {
         /// - 'Ok(())' si la calificación fue registrada exitosamente.
         /// - 'Err(ErrorMarketplace)' si ocurre un error en la validación o actualización.
         #[ink(message)]
-        pub fn registrar_calificacion(&mut self, id_orden: u32, calificacion: u8) -> Result<(), ErrorMarketplace> {
-            if !(1..=5).contains(&calificacion) {
-                return Err(ErrorMarketplace::CalificacionFueraDeRango);
-            }
-        
-            let caller = self.env().caller();
-        
-            let mut orden = if let Some(o) = self.ordenes.get(id_orden) {
-                o
-            } else {
-                return Err(ErrorMarketplace::OrdenNoExiste);
-            };
-        
-            // Marcar que ya se calificó y obtener quién fue calificado
-            let rol_calificado = orden.marcar_calificacion_realizada(caller)?;
-        
-            // Guardar el puntaje real
-            if rol_calificado == Rol::Vendedor {
-                orden.calificacion_vendedor = Some(calificacion);
-            } else {
-                orden.calificacion_comprador = Some(calificacion);
-            }
-        
-            // Guardar la orden actualizada
-            self.ordenes.insert(id_orden, &orden);
-        
-            // Obtener la cuenta calificada
-            let cuenta_calificada = match rol_calificado {
-                Rol::Vendedor => orden.vendedor,
-                Rol::Comprador => orden.comprador,
-                Rol::Ambos => return Err(ErrorMarketplace::RolInvalido),
-            };
+pub fn registrar_calificacion(
+    &mut self,
+    id_orden: u32,
+    calificacion: u8
+) -> Result<(), ErrorMarketplace> {
+    // validación de rango
+    if !(1..=5).contains(&calificacion) {
+        return Err(ErrorMarketplace::CalificacionFueraDeRango);
+    }
 
-            if !self.usuarios.contains(cuenta_calificada) {
-                return Err(ErrorMarketplace::UsuarioNoExiste);
-            }
-        
-            // Actualizar reputación SIN asignar el mapping a una variable
-            let (suma_actual, cantidad_actual) = if rol_calificado == Rol::Vendedor {
-                if let Some((s, c)) = self.reputacion_como_vendedor.get(cuenta_calificada) {
-                    (s, c)
-                } else {
-                    (0, 0)
-            match rol_calificado {
-                Rol::Comprador => {
-                    let mut comprador = match self.usuarios.get(orden.comprador) {
-                        Some(u) => u,
-                        None => return Err(ErrorMarketplace::UsuarioNoExiste),
-                    };
-                    comprador.sumar_reputacion_como_comprador(calificacion)?;
-                    self.usuarios.insert(orden.comprador, &comprador);
-                }
+    let caller = self.env().caller();
 
-                Rol::Vendedor => {
-                    let mut vendedor = match self.usuarios.get(orden.vendedor) {
-                        Some(u) => u,
-                        None => return Err(ErrorMarketplace::UsuarioNoExiste),
-                    };
-                    vendedor.sumar_reputacion_como_vendedor(calificacion)?;
-                    self.usuarios.insert(orden.vendedor, &vendedor);
-                }
-            } else {
-                if let Some((s, c)) = self.reputacion_como_comprador.get(cuenta_calificada) {
-                    (s, c)
-                } else {
-                    (0, 0)
-                }
-            };
-        
-            let nueva_suma = suma_actual.saturating_add(calificacion as u32);
-            let nueva_cantidad = cantidad_actual.saturating_add(1);
-        
-            // Insertar en el mapping correcto
-            if rol_calificado == Rol::Vendedor {
-                self.reputacion_como_vendedor.insert(cuenta_calificada, &(nueva_suma, nueva_cantidad));
-            } else {
-                self.reputacion_como_comprador.insert(cuenta_calificada, &(nueva_suma, nueva_cantidad));
-            }
-        
-            Ok(())
+    let mut orden = match self.ordenes.get(id_orden) {
+        Some(o) => o,
+        None => return Err(ErrorMarketplace::OrdenNoExiste),
+    };
+
+    let rol_calificado = orden.marcar_calificacion_realizada(caller)?;
+
+    if rol_calificado == Rol::Vendedor {
+        orden.calificacion_vendedor = Some(calificacion);
+    } else {
+        orden.calificacion_comprador = Some(calificacion);
+    }
+
+    self.ordenes.insert(id_orden, &orden);
+
+    let cuenta_calificada = match rol_calificado {
+        Rol::Vendedor => orden.vendedor,
+        Rol::Comprador => orden.comprador,
+        Rol::Ambos => return Err(ErrorMarketplace::RolInvalido),
+    };
+
+    if !self.usuarios.contains(cuenta_calificada) {
+        return Err(ErrorMarketplace::UsuarioNoExiste);
+    }
+
+    // obtener reputación actual
+    let (suma_actual, cantidad_actual) = if rol_calificado == Rol::Vendedor {
+        if let Some((s, c)) =
+            self.reputacion_como_vendedor.get(cuenta_calificada)
+        {
+            (s, c)
+        } else {
+            (0, 0)
         }
+    } else {
+        if let Some((s, c)) =
+            self.reputacion_como_comprador.get(cuenta_calificada)
+        {
+            (s, c)
+        } else {
+            (0, 0)
+        }
+    };
+
+    let nueva_suma = suma_actual.saturating_add(calificacion as u32);
+    let nueva_cantidad = cantidad_actual.saturating_add(1);
+
+    if rol_calificado == Rol::Vendedor {
+        self.reputacion_como_vendedor.insert(
+            cuenta_calificada,
+            &(nueva_suma, nueva_cantidad),
+        );
+    } else {
+        self.reputacion_como_comprador.insert(
+            cuenta_calificada,
+            &(nueva_suma, nueva_cantidad),
+        );
+    }
+
+    Ok(())
+}
+
 
         /// Obtiene la reputación promedio de un vendedor.
         /// # Parámetros
