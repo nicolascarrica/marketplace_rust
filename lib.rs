@@ -1659,79 +1659,84 @@ mod market_place {
         /// - 'Ok(())' si la calificación fue registrada exitosamente.
         /// - 'Err(ErrorMarketplace)' si ocurre un error en la validación o actualización.
         #[ink(message)]
-pub fn registrar_calificacion(
-    &mut self,
-    id_orden: u32,
-    calificacion: u8
-) -> Result<(), ErrorMarketplace> {
-    // validación de rango
-    if !(1..=5).contains(&calificacion) {
-        return Err(ErrorMarketplace::CalificacionFueraDeRango);
-    }
-
-    let caller = self.env().caller();
-
-    let mut orden = match self.ordenes.get(id_orden) {
-        Some(o) => o,
-        None => return Err(ErrorMarketplace::OrdenNoExiste),
-    };
-
-    let rol_calificado = orden.marcar_calificacion_realizada(caller)?;
-
-    if rol_calificado == Rol::Vendedor {
-        orden.calificacion_vendedor = Some(calificacion);
-    } else {
-        orden.calificacion_comprador = Some(calificacion);
-    }
-
-    self.ordenes.insert(id_orden, &orden);
-
-    let cuenta_calificada = match rol_calificado {
-        Rol::Vendedor => orden.vendedor,
-        Rol::Comprador => orden.comprador,
-        Rol::Ambos => return Err(ErrorMarketplace::RolInvalido),
-    };
-
-    if !self.usuarios.contains(cuenta_calificada) {
-        return Err(ErrorMarketplace::UsuarioNoExiste);
-    }
-
-    // obtener reputación actual
-    let (suma_actual, cantidad_actual) = if rol_calificado == Rol::Vendedor {
-        if let Some((s, c)) =
-            self.reputacion_como_vendedor.get(cuenta_calificada)
-        {
-            (s, c)
-        } else {
-            (0, 0)
+        pub fn registrar_calificacion(
+            &mut self,
+            id_orden: u32,
+            calificacion: u8
+        ) -> Result<(), ErrorMarketplace> {
+            let caller = self.env().caller();
+            self._registrar_calificacion(id_orden, calificacion, caller)
         }
-    } else {
-        if let Some((s, c)) =
-            self.reputacion_como_comprador.get(cuenta_calificada)
-        {
-            (s, c)
-        } else {
-            (0, 0)
+
+        //documentacion de privada??
+        fn _registrar_calificacion(&mut self, id_orden: u32, calificacion: u8, caller: AccountId) -> Result<(), ErrorMarketplace> {
+                        // validación de rango
+            if !(1..=5).contains(&calificacion) {
+                return Err(ErrorMarketplace::CalificacionFueraDeRango);
+            }
+
+            let mut orden = match self.ordenes.get(id_orden) {
+                Some(o) => o,
+                None => return Err(ErrorMarketplace::OrdenNoExiste),
+            };
+
+            let rol_calificado = orden.marcar_calificacion_realizada(caller)?;
+
+            if rol_calificado == Rol::Vendedor {
+                orden.calificacion_vendedor = Some(calificacion);
+            } else {
+                orden.calificacion_comprador = Some(calificacion);
+            }
+
+            self.ordenes.insert(id_orden, &orden);
+
+            let cuenta_calificada = match rol_calificado {
+                Rol::Vendedor => orden.vendedor,
+                Rol::Comprador => orden.comprador,
+                Rol::Ambos => return Err(ErrorMarketplace::RolInvalido),
+            };
+
+            if !self.usuarios.contains(cuenta_calificada) {
+                return Err(ErrorMarketplace::UsuarioNoExiste);
+            }
+
+            // obtener reputación actual
+            let (suma_actual, cantidad_actual) = if rol_calificado == Rol::Vendedor {
+                if let Some((s, c)) =
+                    self.reputacion_como_vendedor.get(cuenta_calificada)
+                {
+                    (s, c)
+                } else {
+                    (0, 0)
+                }
+            } else {
+                if let Some((s, c)) =
+                    self.reputacion_como_comprador.get(cuenta_calificada)
+                {
+                    (s, c)
+                } else {
+                    (0, 0)
+                }
+            };
+
+            let nueva_suma = suma_actual.saturating_add(calificacion as u32);
+            let nueva_cantidad = cantidad_actual.saturating_add(1);
+
+            if rol_calificado == Rol::Vendedor {
+                self.reputacion_como_vendedor.insert(
+                    cuenta_calificada,
+                    &(nueva_suma, nueva_cantidad),
+                );
+            } else {
+                self.reputacion_como_comprador.insert(
+                    cuenta_calificada,
+                    &(nueva_suma, nueva_cantidad),
+                );
+            }
+
+            Ok(())
         }
-    };
-
-    let nueva_suma = suma_actual.saturating_add(calificacion as u32);
-    let nueva_cantidad = cantidad_actual.saturating_add(1);
-
-    if rol_calificado == Rol::Vendedor {
-        self.reputacion_como_vendedor.insert(
-            cuenta_calificada,
-            &(nueva_suma, nueva_cantidad),
-        );
-    } else {
-        self.reputacion_como_comprador.insert(
-            cuenta_calificada,
-            &(nueva_suma, nueva_cantidad),
-        );
-    }
-
-    Ok(())
-}
+    
 
 
         /// Obtiene la reputación promedio de un vendedor.
@@ -1764,7 +1769,62 @@ pub fn registrar_calificacion(
                 0
             }
         }
- 
+
+        //Funciones del contrato 2
+
+        /// Obtiene la cantidad total de órdenes creadas en el marketplace. 
+        /// # Parámetros
+        /// - '&self': referencia al Marketplace.
+        /// # Retorna
+        /// - 'u32': cantidad total de órdenes.
+        #[ink(message)]
+        pub fn get_cantidad_ordenes(&self) -> u32 {
+            self.contador_ordenes
+        }
+
+        /// Obtiene una orden por su ID. 
+        /// # Parámetros
+        /// - '&self': referencia al Marketplace.
+        /// - 'id_orden: u32': identificador único de la orden.
+        /// # Retorna
+        /// - 'Option<Orden>': Some(Orden) si la orden existe, None si no existe.
+        #[ink(message)]
+        pub fn get_orden(&self, id_orden: u32) -> Option<Orden> {
+            self.ordenes.get(id_orden)
+        }
+
+        /// Obtiene la reputación como vendedor de un usuario por su ID.
+        /// # Parámetros    
+        /// - '&self': referencia al Marketplace.
+        /// - 'id_vendedor: AccountId': cuenta del vendedor.
+        /// # Retorna
+        /// - 'Option<(u32, u32)>': Some((suma_calificaciones, cantidad_calificaciones)) si el vendedor tiene reputación, None si no tiene.
+        #[ink(message)]
+        pub fn get_reputacion_vendedor(&self, id_vendedor: AccountId) -> Option<(u32, u32)> {
+            self.reputacion_como_vendedor.get(id_vendedor)
+        }
+        
+        /// Obtiene la reputación como comprador de un usuario por su ID.
+        /// # Parámetros    
+        /// - '&self': referencia al Marketplace.
+        /// - 'id_comprador: AccountId': cuenta del comprador.
+        /// # Retorna
+        /// - 'Option<(u32, u32)>': Some((suma_calificaciones, cantidad_calificaciones)) si el comprador tiene reputación, None si no tiene.
+        #[ink(message)]
+        pub fn get_reputacion_comprador(&self, id_comprador: AccountId) -> Option<(u32, u32)> {
+            self.reputacion_como_comprador.get(id_comprador)
+        }
+
+        /// Obtiene un producto por su ID.
+        /// # Parámetros
+        /// - '&self': referencia al Marketplace.
+        /// - 'id_producto: u32': identificador único del producto.
+        /// # Retorna
+        /// - 'Option<Producto>': Some(Producto) si el producto existe, None si no existe.
+        #[ink(message)]
+        pub fn get_producto(&self, id_producto: u32) -> Option<Producto> {
+            self.productos.get(id_producto)
+        }
         
     }
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
@@ -3154,8 +3214,9 @@ pub fn registrar_calificacion(
             orden.estado = EstadoOrden::Recibido;
             contrato.ordenes.insert(1, &orden);
 
-            set_caller(account(1)); // comprador
-            let res = contrato.registrar_calificacion(1, 5);
+            let id_comprador = account(1); // comprador
+
+            let res = contrato._registrar_calificacion(1, 5, id_comprador);
             assert_eq!(res, Ok(()));
 
             let reputacion = contrato.obtener_reputacion_vendedor(account(2));
@@ -3170,8 +3231,9 @@ pub fn registrar_calificacion(
             orden.estado = EstadoOrden::Recibido;
             contrato.ordenes.insert(1, &orden);
 
-            set_caller(account(2)); // vendedor
-            let res = contrato.registrar_calificacion(1, 4);
+            let id_vendedor = account(2); // vendedor
+
+            let res = contrato._registrar_calificacion(1, 4, id_vendedor);
             assert_eq!(res, Ok(()));
 
             let reputacion = contrato.obtener_reputacion_comprador(account(1));
@@ -3185,8 +3247,8 @@ pub fn registrar_calificacion(
             let orden = Orden::new(1, account(1), account(2), 10, 1, 100);
             contrato.ordenes.insert(1, &orden); // Pendiente
 
-            set_caller(account(1));
-            let res = contrato.registrar_calificacion(1, 5);
+            let id=account(1); // comprador
+            let res = contrato._registrar_calificacion(1, 5, id);
             assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
         }
 
@@ -3198,9 +3260,9 @@ pub fn registrar_calificacion(
             orden.estado = EstadoOrden::Recibido;
             contrato.ordenes.insert(1, &orden);
 
-            set_caller(account(1));
-            assert_eq!(contrato.registrar_calificacion(1, 5), Ok(()));
-            let res = contrato.registrar_calificacion(1, 3);
+            let id_comprador = account(1);
+            assert_eq!(contrato._registrar_calificacion(1, 5, id_comprador), Ok(()));
+            let res = contrato._registrar_calificacion(1, 3, id_comprador);
 
             assert_eq!(res, Err(ErrorMarketplace::CalificacionYaRealizada));
         }
@@ -3213,9 +3275,9 @@ pub fn registrar_calificacion(
             orden.estado = EstadoOrden::Recibido;
             contrato.ordenes.insert(1, &orden);
 
-            set_caller(account(2));
-            assert_eq!(contrato.registrar_calificacion(1, 4), Ok(()));
-            let res = contrato.registrar_calificacion(1, 2);
+            let id_vendedor = account(2);
+            assert_eq!(contrato._registrar_calificacion(1, 4, id_vendedor), Ok(()));
+            let res = contrato._registrar_calificacion(1, 2, id_vendedor);
 
             assert_eq!(res, Err(ErrorMarketplace::CalificacionYaRealizada));
         }
@@ -3228,8 +3290,8 @@ pub fn registrar_calificacion(
             orden.estado = EstadoOrden::Recibido;
             contrato.ordenes.insert(1, &orden);
 
-            set_caller(account(3)); // no pertenece a la orden
-            let res = contrato.registrar_calificacion(1, 5);
+            let id_tercero = account(3); // no pertenece a la orden
+            let res = contrato._registrar_calificacion(1, 5, id_tercero);
 
             assert_eq!(res, Err(ErrorMarketplace::NoAutorizado));
         }
@@ -3242,8 +3304,8 @@ pub fn registrar_calificacion(
             orden.estado = EstadoOrden::Recibido;
             contrato.ordenes.insert(1, &orden);
 
-            set_caller(account(1));
-            let res = contrato.registrar_calificacion(1, 6);
+            let id_comprador = account(1);
+            let res = contrato._registrar_calificacion(1, 6, id_comprador);
 
             assert_eq!(res, Err(ErrorMarketplace::CalificacionFueraDeRango));
         }
@@ -3260,9 +3322,9 @@ pub fn registrar_calificacion(
             orden2.estado = EstadoOrden::Recibido;
             contrato.ordenes.insert(2, &orden2);
 
-            set_caller(account(1));
-            assert_eq!(contrato.registrar_calificacion(1, 4), Ok(()));
-            assert_eq!(contrato.registrar_calificacion(2, 5), Ok(()));
+            let id_comprador = account(1);
+            assert_eq!(contrato._registrar_calificacion(1, 4, id_comprador), Ok(()));
+            assert_eq!(contrato._registrar_calificacion(2, 5, id_comprador), Ok(()));
 
             // Promedio del vendedor: (4 + 5) / 2 = 4
             let reputacion = contrato.obtener_reputacion_vendedor(account(2));
@@ -3287,11 +3349,11 @@ pub fn registrar_calificacion(
             orden.estado = EstadoOrden::Recibido;
             contrato.ordenes.insert(1, &orden);
 
-            set_caller(account(1));
-            contrato.registrar_calificacion(1, 4).ok();
+            let id_comprador = account(1);
+            contrato._registrar_calificacion(1, 4, id_comprador).ok();
 
-            set_caller(account(2));
-            contrato.registrar_calificacion(1, 2).ok();
+            let id_vendedor = account(2);
+            contrato._registrar_calificacion(1, 2, id_vendedor).ok();
 
             let reputacion_comprador = contrato.obtener_reputacion_comprador(account(1));
             let reputacion_vendedor = contrato.obtener_reputacion_vendedor(account(2));
@@ -3304,8 +3366,8 @@ pub fn registrar_calificacion(
         fn test_obtener_reputacion_usuario_inexistente() {
             let mut contrato = contract_dummy();
 
-           set_caller(account(1));
-            let res = contrato.registrar_calificacion(99, 5);
+            let id = account(1);
+            let res = contrato._registrar_calificacion(99, 5, id);
 
             assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
         }
@@ -3314,8 +3376,8 @@ pub fn registrar_calificacion(
         fn test_calificar_orden_inexistente() {
             let mut contrato = contract_dummy();
 
-            set_caller(account(1));
-            let res = contrato.registrar_calificacion(99, 5);
+            let id = account(1);
+            let res = contrato._registrar_calificacion(99, 5, id);
 
             assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
         }
@@ -3332,8 +3394,8 @@ pub fn registrar_calificacion(
 
             contrato.ordenes.insert(1, &orden);
 
-            set_caller(vendedor); // vendedor califica al comprador
-            let res = contrato.registrar_calificacion(1, 4);
+            // vendedor califica al comprador
+            let res = contrato._registrar_calificacion(1, 4, vendedor);
 
             assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
         }
@@ -3350,8 +3412,8 @@ pub fn registrar_calificacion(
 
             contrato.ordenes.insert(1, &orden);
 
-            set_caller(comprador); // comprador califica al vendedor
-            let res = contrato.registrar_calificacion(1, 5);
+            // comprador califica al vendedor
+            let res = contrato._registrar_calificacion(1, 5, comprador);
 
             assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
         }
