@@ -25,9 +25,8 @@ mod market_place {
         Ambos,
     }
 
-
     /// Representa los motivos por los cuales un comprador puede disputar una orden.
-    /// 
+    ///
     /// # Variantes
     /// - `ProductoNoRecibido`: El comprador no recibió el producto.
     /// - `ProductoDefectuoso`: El producto recibido está defectuoso o dañado.
@@ -44,7 +43,7 @@ mod market_place {
         ProductoRecibidoNoCoincideDescripcion,
         FaltaDeProducto,
         ProductoIncorrecto,
-        Otro {descripcion: String},
+        Otro { descripcion: String },
     }
 
     /// Representa las posibles resoluciones que un vendedor puede ofrecer para resolver una disputa.
@@ -58,12 +57,11 @@ mod market_place {
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub enum ResolucionDisputa {
-        ReenvioProducto,      
-        CambioProducto,       
-        Reembolso,  
-        Otro {descripcion: String},
+        ReenvioProducto,
+        CambioProducto,
+        Reembolso,
+        Otro { descripcion: String },
     }
-
 
     /// Categorías disponibles para clasificar productos en el marketplace.
     ///
@@ -146,7 +144,7 @@ mod market_place {
         CancelacionPendiente,
         CalificacionYaRealizada,
         CalificacionFueraDeRango,
-        OrdenNoEnDisputa
+        OrdenNoEnDisputa,
     }
     // Structs
 
@@ -239,7 +237,6 @@ mod market_place {
                 }
             }
         }
-
     }
 
     /// Representa un producto en el marketplace.
@@ -478,7 +475,7 @@ mod market_place {
         cancelacion_solicitada_por: Option<Rol>,
         calificado_por_comprador: bool,
         calificado_por_vendedor: bool,
-        calificacion_vendedor: Option<u8>,  // Calificación del comprador al vendedor
+        calificacion_vendedor: Option<u8>, // Calificación del comprador al vendedor
         calificacion_comprador: Option<u8>,
         motivo_disputa: Option<MotivoDisputa>,
     }
@@ -553,7 +550,7 @@ mod market_place {
         contador_publicacion: u32,
         contador_productos: u32,
         reputacion_como_vendedor: Mapping<AccountId, (u32, u32)>,
-        reputacion_como_comprador: Mapping<AccountId, (u32, u32)>,   
+        reputacion_como_comprador: Mapping<AccountId, (u32, u32)>,
     }
 
     impl Orden {
@@ -716,7 +713,10 @@ mod market_place {
             }
         }
 
-        fn marcar_calificacion_realizada(&mut self, caller: AccountId) -> Result<Rol, ErrorMarketplace> {
+        fn marcar_calificacion_realizada(
+            &mut self,
+            caller: AccountId,
+        ) -> Result<Rol, ErrorMarketplace> {
             if self.estado != EstadoOrden::Recibido {
                 return Err(ErrorMarketplace::EstadoInvalido);
             }
@@ -739,13 +739,6 @@ mod market_place {
             } else {
                 Err(ErrorMarketplace::NoAutorizado)
             }
-        }
-        //borrar despues, no se usa 
-        fn verificar_autorizado(&self, caller: AccountId) -> Result<(), ErrorMarketplace> {
-            if caller != self.comprador && caller != self.vendedor {
-                return Err(ErrorMarketplace::NoAutorizado);
-            }
-            Ok(())
         }
 
         fn verificar_estado_disputa(&self) -> Result<(), ErrorMarketplace> {
@@ -1506,7 +1499,7 @@ mod market_place {
                 publicacion.id_vendedor,
                 publicacion.id_producto,
                 cant_producto as u32,
-            )?;            
+            )?;
 
             // Crear nueva orden
             let nueva_id = self.contador_ordenes;
@@ -1518,7 +1511,6 @@ mod market_place {
                 cant_producto,
                 tot_orden,
             );
-
 
             self.ordenes.insert(nueva_id, &orden);
 
@@ -1723,7 +1715,7 @@ mod market_place {
         }
 
         /// Registra una calificación para una orden completada.
-        /// 
+        ///
         /// # Parámetros
         /// - '&mut self': referencia mutable al Marketplace.
         /// - 'id_orden: u32': identificador único de la orden a calificar.
@@ -1735,15 +1727,20 @@ mod market_place {
         pub fn registrar_calificacion(
             &mut self,
             id_orden: u32,
-            calificacion: u8
+            calificacion: u8,
         ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
             self._registrar_calificacion(id_orden, calificacion, caller)
         }
 
         //documentacion de privada??
-        fn _registrar_calificacion(&mut self, id_orden: u32, calificacion: u8, caller: AccountId) -> Result<(), ErrorMarketplace> {
-                        // validación de rango
+        fn _registrar_calificacion(
+            &mut self,
+            id_orden: u32,
+            calificacion: u8,
+            caller: AccountId,
+        ) -> Result<(), ErrorMarketplace> {
+            // validación de rango
             if !(1..=5).contains(&calificacion) {
                 return Err(ErrorMarketplace::CalificacionFueraDeRango);
             }
@@ -1775,17 +1772,13 @@ mod market_place {
 
             // obtener reputación actual
             let (suma_actual, cantidad_actual) = if rol_calificado == Rol::Vendedor {
-                if let Some((s, c)) =
-                    self.reputacion_como_vendedor.get(cuenta_calificada)
-                {
+                if let Some((s, c)) = self.reputacion_como_vendedor.get(cuenta_calificada) {
                     (s, c)
                 } else {
                     (0, 0)
                 }
             } else {
-                if let Some((s, c)) =
-                    self.reputacion_como_comprador.get(cuenta_calificada)
-                {
+                if let Some((s, c)) = self.reputacion_como_comprador.get(cuenta_calificada) {
                     (s, c)
                 } else {
                     (0, 0)
@@ -1796,21 +1789,15 @@ mod market_place {
             let nueva_cantidad = cantidad_actual.saturating_add(1);
 
             if rol_calificado == Rol::Vendedor {
-                self.reputacion_como_vendedor.insert(
-                    cuenta_calificada,
-                    &(nueva_suma, nueva_cantidad),
-                );
+                self.reputacion_como_vendedor
+                    .insert(cuenta_calificada, &(nueva_suma, nueva_cantidad));
             } else {
-                self.reputacion_como_comprador.insert(
-                    cuenta_calificada,
-                    &(nueva_suma, nueva_cantidad),
-                );
+                self.reputacion_como_comprador
+                    .insert(cuenta_calificada, &(nueva_suma, nueva_cantidad));
             }
 
             Ok(())
         }
-    
-
 
         /// Obtiene la reputación promedio de un vendedor.
         /// # Parámetros
@@ -1853,13 +1840,22 @@ mod market_place {
         /// - 'Ok(())' si la disputa fue abierta exitosamente.
         /// - 'Err(ErrorMarketplace)' si ocurre un error en la validación o actualización.
         #[ink(message)]
-        pub fn abrir_disputa(&mut self, id_orden: u32, motivo: MotivoDisputa) -> Result<(), ErrorMarketplace> {
+        pub fn abrir_disputa(
+            &mut self,
+            id_orden: u32,
+            motivo: MotivoDisputa,
+        ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
             self._abrir_disputa(caller, id_orden, motivo)
         }
 
         //lo habia pensado para al vendedor tambien, pero no encontramos motivos para que el abra la disputa
-        fn _abrir_disputa(&mut self, caller: AccountId, id_orden: u32, motivo: MotivoDisputa) -> Result<(), ErrorMarketplace> {
+        fn _abrir_disputa(
+            &mut self,
+            caller: AccountId,
+            id_orden: u32,
+            motivo: MotivoDisputa,
+        ) -> Result<(), ErrorMarketplace> {
             // verificar que el usuario exista
             self.verificar_usuario_existe(caller)?;
 
@@ -1867,7 +1863,10 @@ mod market_place {
             self.verificar_rol_comprador(caller)?;
 
             // verificar que la orden exista
-            let mut orden = self.ordenes.get(id_orden).ok_or(ErrorMarketplace::OrdenNoExiste)?;
+            let mut orden = self
+                .ordenes
+                .get(id_orden)
+                .ok_or(ErrorMarketplace::OrdenNoExiste)?;
 
             // verifico el estado de la orden
             orden.verificar_estado_disputa()?;
@@ -1891,12 +1890,21 @@ mod market_place {
         /// - 'Ok(())' si la disputa fue resuelta exitosamente.
         /// - 'Err(ErrorMarketplace)' si ocurre un error en la validación o actualización.
         #[ink(message)]
-        pub fn resolver_disputa(&mut self, id_orden: u32, resolucion: ResolucionDisputa) -> Result<(), ErrorMarketplace> {
+        pub fn resolver_disputa(
+            &mut self,
+            id_orden: u32,
+            resolucion: ResolucionDisputa,
+        ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
             self._resolver_disputa(caller, id_orden, resolucion)
         }
 
-        fn _resolver_disputa(&mut self, caller: AccountId, id_orden: u32, resolucion: ResolucionDisputa) -> Result<(), ErrorMarketplace> {
+        fn _resolver_disputa(
+            &mut self,
+            caller: AccountId,
+            id_orden: u32,
+            resolucion: ResolucionDisputa,
+        ) -> Result<(), ErrorMarketplace> {
             // verificar que el usuario exista
             self.verificar_usuario_existe(caller)?;
 
@@ -1904,7 +1912,10 @@ mod market_place {
             self.verificar_rol_comprador(caller)?;
 
             // verificar que la orden exista
-            let mut orden = self.ordenes.get(id_orden).ok_or(ErrorMarketplace::OrdenNoExiste)?;
+            let mut orden = self
+                .ordenes
+                .get(id_orden)
+                .ok_or(ErrorMarketplace::OrdenNoExiste)?;
 
             // verifico el estado de la orden
             if orden.estado != EstadoOrden::EnDisputa {
@@ -1915,15 +1926,15 @@ mod market_place {
             match resolucion {
                 ResolucionDisputa::ReenvioProducto | ResolucionDisputa::CambioProducto => {
                     orden.estado = EstadoOrden::Enviado;
-                },
+                }
                 ResolucionDisputa::Reembolso => {
-                    // poner la orden en pendiente por las dudas 
+                    // poner la orden en pendiente por las dudas
                     orden.estado = EstadoOrden::Pendiente;
                     self.ordenes.insert(id_orden, &orden);
 
                     // el comprador inicia la cancelación
                     orden.gestionar_cancelacion(caller)?;
-                },
+                }
                 ResolucionDisputa::Otro { descripcion: _ } => {
                     orden.estado = EstadoOrden::Resuelta;
                 }
@@ -1937,7 +1948,7 @@ mod market_place {
 
         //Funciones del contrato 2
 
-        /// Obtiene la cantidad total de órdenes creadas en el marketplace. 
+        /// Obtiene la cantidad total de órdenes creadas en el marketplace.
         /// # Parámetros
         /// - '&self': referencia al Marketplace.
         /// # Retorna
@@ -1947,7 +1958,7 @@ mod market_place {
             self.contador_ordenes
         }
 
-        /// Obtiene una orden por su ID. 
+        /// Obtiene una orden por su ID.
         /// # Parámetros
         /// - '&self': referencia al Marketplace.
         /// - 'id_orden: u32': identificador único de la orden.
@@ -1968,7 +1979,7 @@ mod market_place {
         pub fn get_reputacion_vendedor(&self, id_vendedor: AccountId) -> Option<(u32, u32)> {
             self.reputacion_como_vendedor.get(id_vendedor)
         }
-        
+
         /// Obtiene la reputación como comprador de un usuario por su ID.
         /// # Parámetros    
         /// - '&self': referencia al Marketplace.
@@ -1990,7 +2001,6 @@ mod market_place {
         pub fn get_producto(&self, id_producto: u32) -> Option<Producto> {
             self.productos.get(id_producto)
         }
-        
     }
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
     /// module and test functions are marked with a `#[test]` attribute.
@@ -2066,7 +2076,7 @@ mod market_place {
             orden.estado = EstadoOrden::Cancelada;
             let res = orden.marcar_recibida(account(1));
             assert_eq!(res, Err(ErrorMarketplace::OrdenCancelada));
-        }        
+        }
 
         //TEST DE ORDENES DE CANCELACIONES
         #[test]
@@ -2369,7 +2379,7 @@ mod market_place {
         }
 
         /// Test MarketPlace
-        
+
         //TEST DE REGISTRAR USUARIO
         #[ink::test]
         fn test_registrar_usuario_ok() {
@@ -2608,7 +2618,7 @@ mod market_place {
 
             assert_eq!(deposito.stock, stock_inicial);
         }
-        
+
         #[ink::test]
         fn test_crear_publicacion_usuario_no_existe() {
             let mut contract = contract_dummy();
@@ -2933,7 +2943,7 @@ mod market_place {
 
             assert_eq!(res, Err(ErrorMarketplace::StockInsuficiente));
 
-            //el no me dedebería cambiar 
+            //el no me dedebería cambiar
             assert_eq!(publicacion.stock_a_vender, 5);
         }
 
@@ -2993,19 +3003,15 @@ mod market_place {
         fn test_verificar_rol_ya_asignado() {
             let contract = contract_dummy();
 
-            let id_usuario = account(1); 
-            let nuevo_rol = Rol::Comprador; 
+            let id_usuario = account(1);
+            let nuevo_rol = Rol::Comprador;
 
-            let res = contract.verificar_rol_es_diferente(
-                id_usuario,
-                nuevo_rol,
-            );
+            let res = contract.verificar_rol_es_diferente(id_usuario, nuevo_rol);
 
             assert_eq!(res, Err(ErrorMarketplace::RolYaAsignado));
         }
 
-
-        //TEST DE VERIFICAR USUARIO 
+        //TEST DE VERIFICAR USUARIO
         #[ink::test]
         fn test_verificar_usuario_existe_ok() {
             let mut contract = contract_dummy();
@@ -3213,7 +3219,7 @@ mod market_place {
         }
 
         /// Tests de Impl Publicacion
-        
+
         //TEST PUBLICACION
         #[ink::test]
         fn test_publicacion_new_ok() {
@@ -3412,7 +3418,7 @@ mod market_place {
             let orden = Orden::new(1, account(1), account(2), 10, 1, 100);
             contrato.ordenes.insert(1, &orden); // Pendiente
 
-            let id=account(1); // comprador
+            let id = account(1); // comprador
             let res = contrato._registrar_calificacion(1, 5, id);
             assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
         }
@@ -3586,85 +3592,81 @@ mod market_place {
         #[ink::test]
         fn test_obtener_reputacion_vendedor_sin_calificaciones() {
             let contrato = contract_dummy();
-        
+
             let vendedor = account(1);
-        
+
             let reputacion = contrato.obtener_reputacion_vendedor(vendedor);
-        
+
             assert_eq!(reputacion, 0);
         }
 
         #[ink::test]
         fn test_obtener_reputacion_vendedor_una_calificacion() {
             let mut contrato = contract_dummy();
-        
+
             let vendedor = account(1);
-        
+
             // suma = 4, cantidad = 1
-            contrato
-                .reputacion_como_vendedor
-                .insert(vendedor, &(4, 1));
-        
+            contrato.reputacion_como_vendedor.insert(vendedor, &(4, 1));
+
             let reputacion = contrato.obtener_reputacion_vendedor(vendedor);
-        
+
             assert_eq!(reputacion, 4);
         }
 
         #[ink::test]
         fn test_obtener_reputacion_vendedor_varias_calificaciones() {
             let mut contrato = contract_dummy();
-        
+
             let vendedor = account(1);
-        
+
             // (4 + 5 + 3) / 3 = 4
-            contrato
-                .reputacion_como_vendedor
-                .insert(vendedor, &(12, 3));
-        
+            contrato.reputacion_como_vendedor.insert(vendedor, &(12, 3));
+
             let reputacion = contrato.obtener_reputacion_vendedor(vendedor);
-        
+
             assert_eq!(reputacion, 4);
         }
 
         #[ink::test]
         fn test_obtener_reputacion_comprador_sin_calificaciones() {
             let contrato = contract_dummy();
-        
+
             let comprador = account(2);
-        
+
             let reputacion = contrato.obtener_reputacion_comprador(comprador);
-        
+
             assert_eq!(reputacion, 0);
         }
 
         #[ink::test]
         fn test_obtener_reputacion_comprador_una_calificacion() {
             let mut contrato = contract_dummy();
-        
+
             let comprador = account(2);
-        
+
             contrato
                 .reputacion_como_comprador
                 .insert(comprador, &(5, 1));
-        
+
             let reputacion = contrato.obtener_reputacion_comprador(comprador);
-        
+
             assert_eq!(reputacion, 5);
         }
 
         #[ink::test]
         fn test_obtener_reputacion_comprador_varias_calificaciones() {
             let mut contrato = contract_dummy();
-        
+
             let comprador = account(2);
-        
+
             // (2 + 4) / 2 = 3
             contrato
                 .reputacion_como_comprador
                 .insert(comprador, &(6, 2));
-        
+
             let reputacion = contrato.obtener_reputacion_comprador(comprador);
-        
+
             assert_eq!(reputacion, 3);
         }
 
@@ -3695,7 +3697,7 @@ mod market_place {
         fn test_mostrar_productos_sin_productos() {
             let contract = contract_dummy();
 
-            let vendedor = account(2); 
+            let vendedor = account(2);
 
             let res = contract._mostrar_productos_propios(vendedor);
 
@@ -3709,10 +3711,10 @@ mod market_place {
             let vendedor = account(2);
 
             let producto_1 = Producto::new(
-                1, //id producto
+                1,                        //id producto
                 "Producto 1".to_string(), //nombre de producto
-                "Desc 1".to_string(), //descripcion de producto
-                Categoria::Tecnologia, //categoria de producto
+                "Desc 1".to_string(),     //descripcion de producto
+                Categoria::Tecnologia,    //categoria de producto
             );
 
             let producto_2 = Producto::new(
@@ -3745,32 +3747,23 @@ mod market_place {
 
             let comprador = account(1);
 
-            let o = Orden::new(
-                0,
-                comprador,
-                account(2),
-                1,
-                1,
-                100,
-            );
-            contract.ordenes.insert(
-                0,
-                &o
-            );
+            let o = Orden::new(0, comprador, account(2), 1, 1, 100);
+            contract.ordenes.insert(0, &o);
 
             set_caller(comprador);
 
             let res = contract._abrir_disputa(
                 comprador,
                 0,
-                MotivoDisputa::Otro { descripcion: "Producto defectuoso y no es lo pedido".to_string() },
+                MotivoDisputa::Otro {
+                    descripcion: "Producto defectuoso y no es lo pedido".to_string(),
+                },
             );
 
             assert!(res.is_ok());
 
             let orden = contract.ordenes.get(0).unwrap();
             assert_eq!(orden.estado, EstadoOrden::EnDisputa);
-
         }
 
         #[ink::test]
@@ -3783,7 +3776,9 @@ mod market_place {
             let res = contract._abrir_disputa(
                 caller,
                 0,
-                MotivoDisputa::Otro { descripcion: "producto mas chico (Indumentaria) de lo pedido".to_string() },
+                MotivoDisputa::Otro {
+                    descripcion: "producto mas chico (Indumentaria) de lo pedido".to_string(),
+                },
             );
 
             assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
@@ -3799,12 +3794,13 @@ mod market_place {
             let res = contract._abrir_disputa(
                 vendedor,
                 0,
-                MotivoDisputa::Otro { descripcion: "no es lo pedido".to_string() },
+                MotivoDisputa::Otro {
+                    descripcion: "no es lo pedido".to_string(),
+                },
             );
 
             assert_eq!(res, Err(ErrorMarketplace::RolInvalido));
         }
-
 
         #[ink::test]
         fn test_abrir_disputa_falla_si_orden_no_existe() {
@@ -3816,7 +3812,9 @@ mod market_place {
             let res = contract._abrir_disputa(
                 comprador,
                 99, // orden inexistente
-                MotivoDisputa::Otro { descripcion: "no era color de lo pedido".to_string() },
+                MotivoDisputa::Otro {
+                    descripcion: "no era color de lo pedido".to_string(),
+                },
             );
 
             assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
@@ -3828,14 +3826,7 @@ mod market_place {
 
             let comprador = account(1);
 
-            let mut o = Orden::new(
-                0,
-                comprador,
-                account(2),
-                1,
-                1,
-                100,
-            );
+            let mut o = Orden::new(0, comprador, account(2), 1, 1, 100);
 
             o.estado = EstadoOrden::Cancelada;
 
@@ -3861,25 +3852,14 @@ mod market_place {
 
             let comprador = account(1);
 
-            let mut o = Orden::new(
-                0,
-                comprador,
-                account(2),
-                1,
-                1,
-                100,
-            );
+            let mut o = Orden::new(0, comprador, account(2), 1, 1, 100);
             o.estado = EstadoOrden::EnDisputa;
 
             contract.ordenes.insert(0, &o);
 
             set_caller(comprador);
 
-            let res = contract._resolver_disputa(
-                comprador,
-                0,
-                ResolucionDisputa::ReenvioProducto,
-            );
+            let res = contract._resolver_disputa(comprador, 0, ResolucionDisputa::ReenvioProducto);
 
             assert!(res.is_ok());
 
@@ -3896,21 +3876,20 @@ mod market_place {
             let vendedor = account(2);
 
             let mut o = Orden::new(0, comprador, vendedor, 1, 1, 100);
-            
+
             o.estado = EstadoOrden::EnDisputa;
 
             contract.ordenes.insert(0, &o);
 
             // comprador inicia reembolso
             set_caller(comprador);
-            let res = contract._resolver_disputa(
-                comprador,
-                0,
-                ResolucionDisputa::Reembolso,
-            );
+            let res = contract._resolver_disputa(comprador, 0, ResolucionDisputa::Reembolso);
             assert!(res.is_ok());
 
-            assert_eq!(contract.ordenes.get(0).unwrap().estado, EstadoOrden::Pendiente);
+            assert_eq!(
+                contract.ordenes.get(0).unwrap().estado,
+                EstadoOrden::Pendiente
+            );
 
             // vendedor confirma
             set_caller(vendedor);
@@ -3921,21 +3900,13 @@ mod market_place {
             assert_eq!(orden.estado, EstadoOrden::Cancelada);
         }
 
-
         #[ink::test]
         fn test_resolver_disputa_otro_cambia_estado_a_resuelta() {
             let mut contract = contract_dummy();
 
             let comprador = account(1);
 
-            let mut o = Orden::new(
-                0,
-                comprador,
-                account(2),
-                1,
-                1,
-                100,
-            );
+            let mut o = Orden::new(0, comprador, account(2), 1, 1, 100);
             o.estado = EstadoOrden::EnDisputa;
 
             contract.ordenes.insert(0, &o);
@@ -3963,11 +3934,7 @@ mod market_place {
             let caller = account(9);
             set_caller(caller);
 
-            let res = contract._resolver_disputa(
-                caller,
-                0,
-                ResolucionDisputa::Reembolso,
-            );
+            let res = contract._resolver_disputa(caller, 0, ResolucionDisputa::Reembolso);
 
             assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
         }
@@ -3979,11 +3946,7 @@ mod market_place {
             let vendedor = account(2); // Rol::Vendedor
             set_caller(vendedor);
 
-            let res = contract._resolver_disputa(
-                vendedor,
-                0,
-                ResolucionDisputa::Reembolso,
-            );
+            let res = contract._resolver_disputa(vendedor, 0, ResolucionDisputa::Reembolso);
 
             assert_eq!(res, Err(ErrorMarketplace::RolInvalido));
         }
@@ -3995,11 +3958,7 @@ mod market_place {
             let comprador = account(1);
             set_caller(comprador);
 
-            let res = contract._resolver_disputa(
-                comprador,
-                99,
-                ResolucionDisputa::Reembolso,
-            );
+            let res = contract._resolver_disputa(comprador, 99, ResolucionDisputa::Reembolso);
 
             assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
         }
@@ -4010,14 +3969,7 @@ mod market_place {
 
             let comprador = account(1);
 
-            let mut o = Orden::new(
-                0,
-                comprador,
-                account(2),
-                1,
-                1,
-                100,
-            );
+            let mut o = Orden::new(0, comprador, account(2), 1, 1, 100);
 
             o.estado = EstadoOrden::Enviado; // estado inválido
 
@@ -4025,17 +3977,132 @@ mod market_place {
 
             set_caller(comprador);
 
-            let res = contract._resolver_disputa(
-                comprador,
-                0,
-                ResolucionDisputa::Reembolso,
-            );
+            let res = contract._resolver_disputa(comprador, 0, ResolucionDisputa::Reembolso);
 
             assert_eq!(res, Err(ErrorMarketplace::OrdenNoEnDisputa));
         }
 
+        // Tests de getters
 
+        #[ink::test]
+        fn test_get_cantidad_ordenes_inicial() {
+            let contract = nuevo_contrato();
+            assert_eq!(contract.get_cantidad_ordenes(), 0);
+        }
 
+        #[ink::test]
+        fn test_get_orden_existente_devuelve_some() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let orden = Orden::new(
+                1, // id
+                comprador, vendedor, 10,  // id_producto
+                2,   // cant_producto
+                200, // total
+            );
+
+            contract.ordenes.insert(1, &orden);
+            contract.contador_ordenes = 1;
+
+            let res = contract.get_orden(1);
+
+            assert!(res.is_some());
+
+            if let Some(o) = res {
+                assert_eq!(o.id, 1);
+                assert_eq!(o.comprador, comprador);
+                assert_eq!(o.vendedor, vendedor);
+                assert_eq!(o.estado, EstadoOrden::Pendiente);
+                assert_eq!(o.calificacion_vendedor, None);
+                assert_eq!(o.motivo_disputa, None);
+            }
+        }
+
+        #[ink::test]
+        fn test_get_orden_inexistente_devuelve_none() {
+            let contract = nuevo_contrato();
+            assert_eq!(contract.get_orden(0), None);
+        }
+
+        #[ink::test]
+        fn test_get_reputacion_vendedor_con_reputacion() {
+            let mut contract = contract_dummy();
+            let vendedor = account(2);
+
+            // Simulamos reputación
+            contract
+                .reputacion_como_vendedor
+                .insert(vendedor, &(10u32, 2u32));
+
+            let res = contract.get_reputacion_vendedor(vendedor);
+
+            assert_eq!(res, Some((10, 2)));
+        }
+
+        #[ink::test]
+        fn test_get_reputacion_vendedor_sin_reputacion() {
+            let contract = contract_dummy();
+            let vendedor = account(2);
+
+            assert_eq!(contract.get_reputacion_vendedor(vendedor), None);
+        }
+
+        #[ink::test]
+        fn test_get_reputacion_comprador_con_reputacion() {
+            let mut contract = contract_dummy();
+            let comprador = account(1);
+
+            // Simulamos reputación
+            contract
+                .reputacion_como_comprador
+                .insert(comprador, &(5u32, 1u32));
+
+            let res = contract.get_reputacion_comprador(comprador);
+
+            assert_eq!(res, Some((5, 1)));
+        }
+
+        #[ink::test]
+        fn test_get_reputacion_comprador_sin_reputacion() {
+            let contract = contract_dummy();
+            let comprador = account(1);
+
+            assert_eq!(contract.get_reputacion_comprador(comprador), None);
+        }
+
+        #[ink::test]
+        fn test_get_producto_existente_devuelve_some() {
+            let mut contract = contract_dummy();
+            let vendedor = account(2);
+
+            let _ = contract._registrar_producto(
+                vendedor,
+                "Producto Test".to_string(),
+                "Descripcion".to_string(),
+                Categoria::Tecnologia,
+                10,
+            );
+
+            // El primer producto debería tener ID = 1
+            let res = contract.get_producto(1);
+
+            assert!(res.is_some());
+
+            if let Some(producto) = res {
+                assert_eq!(producto.id_producto, 1);
+                assert_eq!(producto.nombre, "producto test".to_string());
+                assert_eq!(producto.categoria, Categoria::Tecnologia);
+            }
+        }
+
+        #[ink::test]
+        fn test_get_producto_inexistente() {
+            let contract = nuevo_contrato();
+            assert_eq!(contract.get_producto(0), None);
+        }
     }
 }
 
