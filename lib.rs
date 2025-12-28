@@ -25,6 +25,48 @@ mod market_place {
         Ambos,
     }
 
+
+    /// Representa los motivos por los cuales un comprador puede disputar una orden.
+    /// 
+    /// # Variantes
+    /// - `ProductoNoRecibido`: El comprador no recibió el producto.
+    /// - `ProductoDefectuoso`: El producto recibido está defectuoso o dañado.
+    /// - `ProductoRecibidoNoCoincideDescripcion`: El producto recibido no coincide con la descripción proporcionada.
+    /// - `FaltaDeProducto`: Faltan artículos en el pedido recibido.
+    /// - `ProductoIncorrecto`: Se recibió un producto diferente al solicitado.
+    /// - `Otro`: Motivo personalizado proporcionado por el comprador.
+    #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+    pub enum MotivoDisputa {
+        ProductoNoRecibido,
+        ProductoDefectuoso,
+        ProductoRecibidoNoCoincideDescripcion,
+        FaltaDeProducto,
+        ProductoIncorrecto,
+        Otro {descripcion: String}, //ver si puedo agregar un descripcion personalizada despues
+    }
+
+    /// Representa las posibles resoluciones que un vendedor puede ofrecer para resolver una disputa.
+    ///
+    /// # Variantes
+    /// - `ReenvioProducto`: El vendedor envía otro producto.
+    /// - `CambioProducto`: El vendedor ofrece un cambio por otro producto.
+    /// - `Reembolso`: El comprador devuelve el producto y recibe un reembolso.
+    /// - `CanceladaMutuoAcuerdo`: La disputa se cancela por mutuo
+    /// - `Otro`: Resolución personalizada proporcionada por el vendedor.
+    #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+    pub enum ResolucionDisputa {
+        ReenvioProducto,      
+        CambioProducto,       
+        Reembolso,  
+        CanceladaMutuoAcuerdo , //dudoso
+        Otro {descripcion: String}, //ver si puedo agregar un descripcion personalizada despues
+    }
+
+
     /// Categorías disponibles para clasificar productos en el marketplace.
     ///
     /// # Variantes
@@ -59,6 +101,8 @@ mod market_place {
         Enviado,
         Recibido,
         Cancelada,
+        EnDisputa,
+        Resuelta,
     }
 
     /// ## Errores del Marketplace
@@ -102,6 +146,7 @@ mod market_place {
         CancelacionPendiente,
         CalificacionYaRealizada,
         CalificacionFueraDeRango,
+        OrdenNoEnDisputa
     }
     // Structs
 
@@ -410,6 +455,14 @@ mod market_place {
     /// - `cant_producto`: Cantidad solicitada del producto.
     /// - `estado`: Estado actual de la orden (Pendiente, Enviado, Recibido, Cancelada).
     /// - `total`: Monto total de la orden (precio * cantidad)
+    /// - `pendiente_cancelacion`: Indica si la orden tiene una solicitud de cancelación pendiente.
+    /// - `cancelacion_solicitada_por`: Rol que inició la solicitud de cancelación (si aplica).
+    /// - `calificado_por_comprador`: Indica si el comprador ya calificó al vendedor.
+    /// - `calificado_por_vendedor`: Indica si el vendedor ya calificó al comprador.
+    /// - `calificacion_vendedor`: Calificación otorgada por el comprador al vendedor (si aplica).
+    /// - `calificacion_comprador`: Calificación otorgada por el vendedor al comprador (si aplica).
+    /// - `motivo_disputa`: Motivo de disputa si la orden está en disputa (si aplica).
+    ///
     #[derive(Debug, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
@@ -426,7 +479,8 @@ mod market_place {
         calificado_por_comprador: bool,
         calificado_por_vendedor: bool,
         calificacion_vendedor: Option<u8>,  // Calificación del comprador al vendedor
-        calificacion_comprador: Option<u8>
+        calificacion_comprador: Option<u8>,
+        motivo_disputa: Option<MotivoDisputa>,
     }
 
     /// Representa el depósito de un vendedor para un producto específico.
@@ -538,6 +592,7 @@ mod market_place {
                 calificado_por_vendedor: false,
                 calificacion_vendedor: None,
                 calificacion_comprador: None,
+                motivo_disputa: None,
             }
         }
         /// Marca la orden como enviada.
@@ -684,6 +739,20 @@ mod market_place {
             } else {
                 Err(ErrorMarketplace::NoAutorizado)
             }
+        }
+
+        fn verificar_autorizado(&self, caller: AccountId) -> Result<(), ErrorMarketplace> {
+            if caller != self.comprador && caller != self.vendedor {
+                return Err(ErrorMarketplace::NoAutorizado);
+            }
+            Ok(())
+        }
+
+        fn verificar_estado_disputa(&self) -> Result<(), ErrorMarketplace> {
+            if self.estado == EstadoOrden::Recibido || self.estado == EstadoOrden::Cancelada {
+                return Err(ErrorMarketplace::EstadoInvalido);
+            }
+            Ok(())
         }
     }
 
@@ -1417,9 +1486,6 @@ mod market_place {
             // Verificar que el stock sea suficiente y asi poder crear la orden
             publicacion.verificar_stock(cant_producto as u32)?;
 
-            //Reducir el stock de la publicación, no del deposito
-            publicacion.reducir_stock(cant_producto as u32)?;
-
             let tot_orden = match publicacion.precio.checked_mul(cant_producto as u128) {
                 Some(valor) => valor,
                 None => return Err(ErrorMarketplace::Overflow),
@@ -1428,6 +1494,19 @@ mod market_place {
             if monto_dado < tot_orden {
                 return Err(ErrorMarketplace::MontoInsuficiente);
             }
+
+            //Reducir el stock de la publicación, no del deposito
+            publicacion.reducir_stock(cant_producto as u32)?;
+
+            //Actualizar la publicación luego de reducir el stock
+            self.publicaciones.insert(id_publicacion, &publicacion);
+
+            //Reducir el stock del deposito del vendedor solo al momento de crear la orden
+            self.actualizar_stock_producto(
+                publicacion.id_vendedor,
+                publicacion.id_producto,
+                cant_producto as u32,
+            )?;            
 
             // Crear nueva orden
             let nueva_id = self.contador_ordenes;
@@ -1440,12 +1519,6 @@ mod market_place {
                 tot_orden,
             );
 
-            //Reducir el stock del deposito del vendedor solo al momento de crear la orden
-            self.actualizar_stock_producto(
-                publicacion.id_vendedor,
-                publicacion.id_producto,
-                cant_producto as u32,
-            )?;
 
             self.ordenes.insert(nueva_id, &orden);
 
@@ -1754,6 +1827,7 @@ mod market_place {
                 0
             }
         }
+
         /// Obtiene la reputación promedio de un comprador.
         /// # Parámetros
         /// - '&self': referencia al Marketplace.
@@ -1768,6 +1842,95 @@ mod market_place {
             } else {
                 0
             }
+        }
+
+        /// Abre una disputa para una orden dada con un motivo específico.
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'id_orden: u32': identificador único de la orden.
+        /// - 'motivo: MotivoDisputa': motivo de la disputa.
+        /// # Retorna
+        /// - 'Ok(())' si la disputa fue abierta exitosamente.
+        /// - 'Err(ErrorMarketplace)' si ocurre un error en la validación o actualización.
+        #[ink(message)]
+        pub fn abrir_disputa(&mut self, id_orden: u32, motivo: MotivoDisputa) -> Result<(), ErrorMarketplace> {
+            let caller = self.env().caller();
+            self._abrir_disputa(caller, id_orden, motivo)
+        }
+
+        //lo habia pensado para al vendedor tambien, pero no encontramos motivos para que el abra la disputa
+        fn _abrir_disputa(&mut self, caller: AccountId, id_orden: u32, motivo: MotivoDisputa) -> Result<(), ErrorMarketplace> {
+            // verificar que el usuario exista
+            self.verificar_usuario_existe(caller)?;
+
+            //verificar que sea un comprador
+            self.verificar_rol_comprador(caller)?;
+
+            // verificar que la orden exista
+            let mut orden = self.ordenes.get(id_orden).ok_or(ErrorMarketplace::OrdenNoExiste)?;
+
+            // verifico el estado de la orden
+            orden.verificar_estado_disputa()?;
+
+            // cambiar estado
+            orden.estado = EstadoOrden::EnDisputa;
+            orden.motivo_disputa = Some(motivo);
+
+            // guardar cambios
+            self.ordenes.insert(id_orden, &orden);
+
+            Ok(())
+        }
+
+        /// Resuelve una disputa para una orden dada con una resolución específica dada por el vendedor.
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'id_orden: u32': identificador único de la orden.
+        /// - 'resolucion: ResolucionDisputa': resolución de la disputa.
+        /// # Retorna
+        /// - 'Ok(())' si la disputa fue resuelta exitosamente.
+        /// - 'Err(ErrorMarketplace)' si ocurre un error en la validación o actualización.
+        #[ink(message)]
+        pub fn resolver_disputa(&mut self, id_orden: u32, resolucion: ResolucionDisputa) -> Result<(), ErrorMarketplace> {
+            let caller = self.env().caller();
+            self._resolver_disputa(caller, id_orden, resolucion)
+        }
+
+        fn _resolver_disputa(&mut self, caller: AccountId, id_orden: u32, resolucion: ResolucionDisputa) -> Result<(), ErrorMarketplace> {
+            // verificar que el usuario exista
+            self.verificar_usuario_existe(caller)?;
+
+            //verificar que sea un comprador el que elija la resolucion
+            self.verificar_rol_comprador(caller)?;
+
+            // verificar que la orden exista
+            let mut orden = self.ordenes.get(id_orden).ok_or(ErrorMarketplace::OrdenNoExiste)?;
+
+            // verifico el estado de la orden
+            if orden.estado != EstadoOrden::EnDisputa {
+                return Err(ErrorMarketplace::OrdenNoEnDisputa);
+            }
+
+            // cambiar estado según resolución
+            match resolucion {
+                ResolucionDisputa::ReenvioProducto | ResolucionDisputa::CambioProducto => {
+                    orden.estado = EstadoOrden::Enviado;
+                },
+                ResolucionDisputa::Reembolso => {
+                    orden.estado = EstadoOrden::Cancelada;
+                },
+                ResolucionDisputa::Otro { descripcion: _ } => {
+                    orden.estado = EstadoOrden::Resuelta;
+                },
+                ResolucionDisputa::CanceladaMutuoAcuerdo => {
+                    return Err(ErrorMarketplace::RolInvalido); //no se si va esta rama
+                },
+            }
+
+            // guardar cambios
+            self.ordenes.insert(id_orden, &orden);
+
+            Ok(())
         }
 
         //Funciones del contrato 2
@@ -3572,6 +3735,107 @@ mod market_place {
             assert_eq!(res[0].id_producto, 1);
             assert_eq!(res[1].id_producto, 2);
         }
+
+        //TEST DE ABRIR DISPUTA
+        #[ink::test]
+        fn test_abrir_disputa_ok() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+
+            let o = Orden::new(
+                0,
+                comprador,
+                account(2),
+                1,
+                1,
+                100,
+            );
+            contract.ordenes.insert(
+                0,
+                &o
+            );
+
+            set_caller(comprador);
+
+            let res = contract._abrir_disputa(
+                comprador,
+                0,
+                MotivoDisputa::Otro { descripcion: "Producto defectuoso y no es lo pedido".to_string() },
+            );
+
+            assert!(res.is_ok());
+
+            let orden = contract.ordenes.get(0).unwrap();
+            assert_eq!(orden.estado, EstadoOrden::EnDisputa);
+
+        }
+
+        #[ink::test]
+        fn test_abrir_disputa_falla_si_usuario_no_existe() {
+            let mut contract = contract_dummy();
+
+            let caller = account(9); // no registrado
+            set_caller(caller);
+
+            let res = contract._abrir_disputa(
+                caller,
+                0,
+                MotivoDisputa::Otro { descripcion: "producto mas chico (Indumentaria) de lo pedido".to_string() },
+            );
+
+            assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
+        }
+
+        #[ink::test]
+        fn test_abrir_disputa_falla_si_orden_no_existe() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+            set_caller(comprador);
+
+            let res = contract._abrir_disputa(
+                comprador,
+                99, // orden inexistente
+                MotivoDisputa::Otro { descripcion: "no era color de lo pedido".to_string() },
+            );
+
+            assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
+        }
+
+        #[ink::test]
+        fn test_abrir_disputa_falla_si_estado_orden_invalido() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+
+            let mut o = Orden::new(
+                0,
+                comprador,
+                account(2),
+                1,
+                1,
+                100,
+            );
+
+            o.estado = EstadoOrden::Cancelada;
+
+            contract.ordenes.insert(0, &o);
+
+            set_caller(comprador);
+
+            let res = contract._abrir_disputa(
+                comprador,
+                0,
+                MotivoDisputa::Otro {
+                    descripcion: "Producto defectuoso".to_string(),
+                },
+            );
+
+            assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
+        }
+
+
 
 
     }
