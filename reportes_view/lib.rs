@@ -25,6 +25,11 @@ mod reportes_view {
         }
 
         /// Consultar top 5 vendedores con mejor reputación.
+        ///
+        /// #Retorna
+        /// -Vec<(AccountId, PuntajeTotal)>: 
+        ///     -AccountId es la cuenta del vendedor,
+        ///     -PuntajeTotal es la suma de todas las calificaciones recibidas.
         #[ink(message)]
         pub fn top_5_vendedores(&self) -> Vec<(AccountId, u32)> {
             // Como no podemos iterar sobre los mappings del otro contrato directamente,
@@ -49,7 +54,7 @@ mod reportes_view {
 
             let mut vendedores_reputacion: Vec<(AccountId, u32)> = Vec::new();
             for vendedor in vendedores_set {
-                if let Some((_, puntaje_total)) = self.marketplace.get_reputacion_vendedor(vendedor) {
+                if let Some((puntaje_total, _)) = self.marketplace.get_reputacion_vendedor(vendedor) {
                     vendedores_reputacion.push((vendedor, puntaje_total));
                 }
             }
@@ -62,6 +67,11 @@ mod reportes_view {
         }
 
         /// Consultar top 5 compradores con mejor reputación.
+        /// 
+        /// #Retorna
+        /// -Vec<(AccountId, PuntajeTotal)>:   
+        ///   -AccountId es la cuenta del comprador,
+        ///   -PuntajeTotal es la suma de todas las calificaciones recibidas.
         #[ink(message)]
         pub fn top_5_compradores(&self) -> Vec<(AccountId, u32)> {
             let cantidad_ordenes = self.marketplace.get_cantidad_ordenes();
@@ -77,7 +87,7 @@ mod reportes_view {
 
             let mut compradores_reputacion: Vec<(AccountId, u32)> = Vec::new();
             for comprador in compradores_set {
-                if let Some((_, puntaje_total)) = self.marketplace.get_reputacion_comprador(comprador) {
+                if let Some((puntaje_total, _)) = self.marketplace.get_reputacion_comprador(comprador) {
                     compradores_reputacion.push((comprador, puntaje_total));
                 }
             }
@@ -86,7 +96,12 @@ mod reportes_view {
             compradores_reputacion.into_iter().take(5).collect()
         }
 
-        /// Ver productos más vendidos.
+        /// Ver productos más vendidos. Orden
+        /// 
+        /// #Retorna
+        /// -Vec<(NombreProducto, CantidadVendida)>
+        ///    -NombreProducto es el nombre del producto,
+        ///    -CantidadVendida es la suma de las cantidades vendidas en órdenes completadas.
         #[ink(message)]
         pub fn productos_mas_vendidos(&self) -> Vec<(String, u32)> {
             let cantidad_ordenes = self.marketplace.get_cantidad_ordenes();
@@ -94,11 +109,8 @@ mod reportes_view {
 
             for i in 0..cantidad_ordenes {
                 if let Some(orden) = self.marketplace.get_orden(i) {
-                    // Consideramos solo órdenes completadas (Recibido) o también Enviado?
-                    // El requerimiento dice "productos más vendidos", usualmente implica ventas concretadas.
-                    // Pero si la orden está creada, ya se "vendió" en teoría, aunque no se haya entregado.
-                    // Voy a contar todas las que no estén canceladas.
-                    if orden.estado != EstadoOrden::Cancelada {
+                    // Consideramos solo órdenes completadas (Recibido)
+                    if orden.estado == EstadoOrden::Recibido {
                          let count = ventas_por_producto.entry(orden.id_producto).or_insert(0);
                          *count += orden.cant_producto as u32;
                     }
@@ -117,9 +129,12 @@ mod reportes_view {
         }
 
         /// Estadísticas por categoría: total de ventas, calificación promedio.
-        /// Retorna Vec<(Categoria, TotalVentas, CalificacionPromedio)>
-        /// CalificacionPromedio: Asumiremos promedio de reputación de vendedores en esa categoría ponderado?
-        /// O simplemente promedio de reputación de los vendedores que vendieron en esa categoría.
+        /// 
+        /// #Retorna
+        /// -Vec<(Categoria, TotalVentas, CalificacionPromedio)>
+        ///   -Categoria es la categoría del producto,
+        ///   -TotalVentas es la suma de los totales de órdenes (u128) en esa categoría,
+        ///   -CalificacionPromedio es la reputación promedio (u8) de los vendedores en esa categoría.
         /// Simplificación: Promedio de reputación de vendedores únicos que tienen ventas en esa categoría.
         #[ink(message)]
         pub fn estadisticas_por_categoria(&self) -> Vec<(Categoria, u128, u8)> {
@@ -195,6 +210,12 @@ mod reportes_view {
         }
 
         /// Cantidad de órdenes por usuario.
+        /// 
+        /// #Parametro
+        /// -usuario: AccountId del usuario (comprador o vendedor).
+        /// 
+        /// #Retorna
+        /// -u32: Cantidad de órdenes donde el usuario es comprador o vendedor.
         #[ink(message)]
         pub fn cantidad_ordenes_usuario(&self, usuario: AccountId) -> u32 {
             let cantidad_ordenes = self.marketplace.get_cantidad_ordenes();
@@ -213,13 +234,82 @@ mod reportes_view {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use ink::env::test;
+
+        fn account(id: u8) -> AccountId {
+            AccountId::from([id; 32])
+        }
+
+        fn set_caller(caller: AccountId) {
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(caller);
+        }
 
         #[ink::test]
-        fn new_works() {
-            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
-            // En unit tests, la llamada a contratos externos fallará si se intenta ejecutar.
-            // Solo probamos la instanciación aquí.
-            let _reportes = ReportesView::new(accounts.alice);
+        fn test_new_works_y_guarda_address() {
+            let marketplace_addr = account(1);
+
+            let reportes = ReportesView::new(marketplace_addr);
+
+            assert_eq!(
+                reportes.marketplace.to_account_id(),
+                marketplace_addr
+            );
+        }
+
+        #[ink::test]
+        fn test_top_5_vendedores_sin_ordenes() {
+            let reportes = ReportesView::new(account(1));
+
+            let resultado = reportes.top_5_vendedores();
+
+            assert!(resultado.is_empty());
+        }
+
+        #[ink::test]
+        fn test_top_5_compradores_sin_ordenes() {
+            let reportes = ReportesView::new(account(1));
+
+            let resultado = reportes.top_5_compradores();
+
+            assert!(resultado.is_empty());
+        }
+
+        #[ink::test]
+        fn test_productos_mas_vendidos_sin_ordenes() {
+            let reportes = ReportesView::new(account(1));
+
+            let resultado = reportes.productos_mas_vendidos();
+
+            assert!(resultado.is_empty());
+        }
+
+        #[ink::test]
+        fn test_estadisticas_por_categoria_sin_datos() {
+            let reportes = ReportesView::new(account(1));
+
+            let resultado = reportes.estadisticas_por_categoria();
+
+            assert!(resultado.is_empty());
+        }
+
+        #[ink::test]
+        fn test_cantidad_ordenes_usuario_sin_ordenes() {
+            let reportes = ReportesView::new(account(1));
+
+            let cantidad = reportes.cantidad_ordenes_usuario(account(2));
+
+            assert_eq!(cantidad, 0);
+        }
+
+        #[ink::test]
+        fn test_llamadas_no_panican() {
+            let reportes = ReportesView::new(account(1));
+
+            reportes.top_5_vendedores();
+            reportes.top_5_compradores();
+            reportes.productos_mas_vendidos();
+            reportes.estadisticas_por_categoria();
+            reportes.cantidad_ordenes_usuario(account(2));
         }
     }
 }
