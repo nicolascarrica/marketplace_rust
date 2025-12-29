@@ -1105,6 +1105,37 @@ mod market_place {
             Ok(())
         }
 
+        fn enviar_producto(
+            &mut self,
+            id_orden: u32,
+            cant_producto: u32
+        ) -> Result<(), ErrorMarketplace> {
+            // Obtener la orden
+            let mut orden = self.ordenes.get(&id_orden)
+                .ok_or(ErrorMarketplace::OrdenNoExiste)?;
+
+            // Verificar stock general del vendedor
+            self.validar_stock_deposito(
+                orden.id_vendedor,
+                orden.id_producto,
+                cant_producto,
+            )?;
+
+            // Marcar orden como enviada
+            orden.marcar_enviada(orden.id_vendedor)?;
+
+            // Reducir stock del depósito del vendedor
+            self.actualizar_stock_producto(
+                orden.id_vendedor,
+                orden.id_producto,
+                cant_producto,
+            )?;
+
+            Ok(())
+        }
+
+
+
         /// Helper para actualizar el stock de un producto en el depósito de un vendedor.
         /// /// Actualiza el stock de un producto en el depósito tras una venta.
         ///
@@ -1925,11 +1956,13 @@ mod market_place {
             // cambiar estado según resolución
             match resolucion {
                 ResolucionDisputa::ReenvioProducto | ResolucionDisputa::CambioProducto => {
-                    orden.estado = EstadoOrden::Enviado;
+                    self.enviar_producto(id_orden, orden.id_publicacion, orden.cant_producto)?;
                 }
                 ResolucionDisputa::Reembolso => {
                     // poner la orden en pendiente por las dudas
                     orden.estado = EstadoOrden::Pendiente;
+                    
+                    // guardar cambios antes de llamar a gestionar_cancelacion
                     self.ordenes.insert(id_orden, &orden);
 
                     // el comprador inicia la cancelación

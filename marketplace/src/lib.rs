@@ -1966,7 +1966,7 @@ pub mod market_place {
         /// - 'Option<Orden>': Some(Orden) si la orden existe, None si no existe.
         #[ink(message)]
         pub fn get_orden(&self, id_orden: u32) -> Option<Orden> {
-            self.ordenes.get(id_orden)
+            self.ordenes.get(&id_orden)
         }
 
         /// Obtiene la reputación como vendedor de un usuario por su ID.
@@ -1977,7 +1977,8 @@ pub mod market_place {
         /// - 'Option<(u32, u32)>': Some((suma_calificaciones, cantidad_calificaciones)) si el vendedor tiene reputación, None si no tiene.
         #[ink(message)]
         pub fn get_reputacion_vendedor(&self, id_vendedor: AccountId) -> Option<(u32, u32)> {
-            self.reputacion_como_vendedor.get(id_vendedor)
+            self.reputacion_como_vendedor.get(&id_vendedor)
+                .map(|r| (r.0, r.1))
         }
 
         /// Obtiene la reputación como comprador de un usuario por su ID.
@@ -1988,7 +1989,8 @@ pub mod market_place {
         /// - 'Option<(u32, u32)>': Some((suma_calificaciones, cantidad_calificaciones)) si el comprador tiene reputación, None si no tiene.
         #[ink(message)]
         pub fn get_reputacion_comprador(&self, id_comprador: AccountId) -> Option<(u32, u32)> {
-            self.reputacion_como_comprador.get(id_comprador)
+            self.reputacion_como_comprador.get(&id_comprador)
+                .map(|r| (r.0, r.1))
         }
 
         /// Obtiene un producto por su ID.
@@ -1999,7 +2001,7 @@ pub mod market_place {
         /// - 'Option<Producto>': Some(Producto) si el producto existe, None si no existe.
         #[ink(message)]
         pub fn get_producto(&self, id_producto: u32) -> Option<Producto> {
-            self.productos.get(id_producto)
+            self.productos.get(&id_producto)
         }
     }
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
@@ -3999,7 +4001,9 @@ pub mod market_place {
 
             let orden = Orden::new(
                 1, // id
-                comprador, vendedor, 10,  // id_producto
+                comprador, 
+                vendedor, 
+                10,  // id_producto
                 2,   // cant_producto
                 200, // total
             );
