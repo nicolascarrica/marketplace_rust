@@ -13,3 +13,9 @@
 # editor
 .vscode/
 
+# Archivos de coverage
+*.profraw
+tarpaulin-report.html
+
+ 
+ 
