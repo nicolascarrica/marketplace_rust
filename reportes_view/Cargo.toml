@@ -1,28 +1,28 @@
 [package]
 name = "reportes_view"
 version = "0.1.0"
-authors = ["Jose <jose@example.com>"]
 edition = "2021"
+authors = ["[your_name] <[your_email]>"]
 
 [dependencies]
 ink = { version = "5.1.1", default-features = false }
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-scale-info = { version = "2.6", default-features = false, features = ["derive"] }
-market_place = { package = "marketplace_rust", path = "..", default-features = false, features = ["ink-as-dependency"] }
 
-[dev-dependencies]
-ink_e2e = "5.1.1"
+marketplace = { path = "../marketplace", default-features = false, features = ["ink-as-dependency"] }
+
+scale = { package = "parity-scale-codec", version = "3.6", default-features = false, features = ["derive"] }
+scale-info = { version = "2.10", default-features = false, features = ["derive"] }
 
 [lib]
-path = "lib.rs"
+name = "reportes_view"
+path = "src/lib.rs"
 
 [features]
 default = ["std"]
 std = [
-    "ink/std",
-    "scale/std",
-    "scale-info/std",
-    "market_place/std",
+  "ink/std",
+  "marketplace/std",
+  "scale/std",
+  "scale-info/std",
 ]
+
 ink-as-dependency = []
-e2e-tests = []
