@@ -252,90 +252,13 @@ mod reportes_view {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use ink::env::test;
-        use ink::ToAccountId;
-
-        fn account(id: u8) -> AccountId {
-            AccountId::from([id; 32])
-        }
-
-        fn set_caller(caller: AccountId) {
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(caller);
-        }
-                #[ink::test]
+        
+        #[ink::test]
         fn new_works() {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
             // En unit tests, la llamada a contratos externos fallará si se intenta ejecutar.
             // Solo probamos la instanciación aquí.
             let _reportes = ReportesView::new(accounts.alice);
         }
-
-/*        #[ink::test]
-        fn test_new_works_y_guarda_address() {
-            let marketplace_addr = account(1);
-
-            let reportes = ReportesView::new(marketplace_addr);
-
-            assert_eq!(
-                reportes.marketplace.to_account_id(),
-                marketplace_addr
-            );
-        }
-
-        #[ink::test]
-        fn test_top_5_vendedores_sin_ordenes() {
-            let reportes = ReportesView::new(account(1));
-
-            let resultado = reportes.top_5_vendedores();
-
-            assert!(resultado.is_empty());
-        }
-
-        #[ink::test]
-        fn test_top_5_compradores_sin_ordenes() {
-            let reportes = ReportesView::new(account(1));
-
-            let resultado = reportes.top_5_compradores();
-
-            assert!(resultado.is_empty());
-        }
-
-        #[ink::test]
-        fn test_productos_mas_vendidos_sin_ordenes() {
-            let reportes = ReportesView::new(account(1));
-
-            let resultado = reportes.productos_mas_vendidos();
-
-            assert!(resultado.is_empty());
-        }
-
-        #[ink::test]
-        fn test_estadisticas_por_categoria_sin_datos() {
-            let reportes = ReportesView::new(account(1));
-
-            let resultado = reportes.estadisticas_por_categoria();
-
-            assert!(resultado.is_empty());
-        }
-
-        #[ink::test]
-        fn test_cantidad_ordenes_usuario_sin_ordenes() {
-            let reportes = ReportesView::new(account(1));
-
-            let cantidad = reportes.cantidad_ordenes_usuario(account(2));
-
-            assert_eq!(cantidad, 0);
-        }
-
-        #[ink::test]
-        fn test_llamadas_no_panican() {
-            let reportes = ReportesView::new(account(1));
-
-            reportes.top_5_vendedores();
-            reportes.top_5_compradores();
-            reportes.productos_mas_vendidos();
-            reportes.estadisticas_por_categoria();
-            reportes.cantidad_ordenes_usuario(account(2));
-        } */
     }
 }
