@@ -1,0 +1,11 @@
+C:\Users\nicol\Desktop\marketplace_rust\src\coverage\debug\deps\ink_metadata-51acecf6e56cec1b.d: C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\lib.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\layout\mod.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\layout\validate.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\specs.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\utils.rs
+
+C:\Users\nicol\Desktop\marketplace_rust\src\coverage\debug\deps\libink_metadata-51acecf6e56cec1b.rlib: C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\lib.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\layout\mod.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\layout\validate.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\specs.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\utils.rs
+
+C:\Users\nicol\Desktop\marketplace_rust\src\coverage\debug\deps\libink_metadata-51acecf6e56cec1b.rmeta: C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\lib.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\layout\mod.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\layout\validate.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\specs.rs C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\utils.rs
+
+C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\lib.rs:
+C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\layout\mod.rs:
+C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\layout\validate.rs:
+C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\specs.rs:
+C:\Users\nicol\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ink_metadata-5.1.1\src\utils.rs:
