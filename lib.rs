@@ -16,6 +16,7 @@ mod market_place {
     /// - `Comprador`: Solo puede comprar productos
     /// - `Vendedor`: Solo puede vender productos
     /// - `Ambos`: Puede tanto comprar como vender
+    /// - `Arbitro`: Solo puede mediar en disputas entre compradores y vendedores
     #[derive(Debug, Clone, Copy, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
@@ -23,6 +24,7 @@ mod market_place {
         Comprador,
         Vendedor,
         Ambos,
+        Arbitro,
     }
 
     /// Representa los motivos por los cuales un comprador puede disputar una orden.
@@ -63,6 +65,19 @@ mod market_place {
         Otro { descripcion: String },
     }
 
+    /// Representa la decisión tomada por el vendedor o árbitro al resolver una disputa.
+    /// 
+    /// # Variantes
+    /// - `Valido`: La disputa es válida y se acepta la resolución propuesta.
+    /// - `NoValido`: La disputa no es válida y se rechaza la resolución propuesta.
+    #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+    pub enum Decision {
+        Valido,
+        NoValido,
+    }
+
     /// Categorías disponibles para clasificar productos en el marketplace.
     ///
     /// # Variantes
@@ -101,6 +116,20 @@ mod market_place {
         Cancelada,
         EnDisputa,
         Resuelta,
+        PendienteArbitro,
+    }
+
+    /// Formas de pago disponibles para las órdenes en el marketplace.
+    /// 
+    /// # Variantes
+    /// - `Efectivo`: Pago en efectivo con un monto específico.
+    /// - `SaldoEnCuenta`: Uso del saldo disponible en la cuenta del usuario.
+    #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+    pub enum FormaDePago {
+        Efectivo {monto: u128},
+        SaldoEnCuenta,
     }
 
     /// ## Errores del Marketplace
@@ -125,6 +154,7 @@ mod market_place {
         OrdenCancelada,
         NoEsComprador,
         NoEsVendedor,
+        NoEsArbitro,
         EstadoInvalido,
         NoAutorizado,
         PrecioInvalido,
@@ -145,6 +175,8 @@ mod market_place {
         CalificacionYaRealizada,
         CalificacionFueraDeRango,
         OrdenNoEnDisputa,
+        SinSaldoEnCuenta,
+        FondosNoRetenidos,
     }
     // Structs
 
@@ -152,7 +184,7 @@ mod market_place {
     ///
     /// # Campos
     /// - `username`: Nombre de usuario único
-    /// - `rol`: Rol del usuario (Comprador, Vendedor, Ambos)
+    /// - `rol`: Rol del usuario (Comprador, Vendedor, Ambos, Arbitro)
     /// - `id`: Identificador único de la cuenta (AccountId)
     /// - `verificacion`: Estado de verificación del usuario
     ///
@@ -217,10 +249,23 @@ mod market_place {
                 Err(ErrorMarketplace::RolInvalido)
             }
         }
+        // Helper validar rol arbitro
+        /// Valida que el rol del usuario sea árbitro.
+        /// 
+        /// # Retorna
+        /// - `Ok(())` si el rol es Arbitro.
+        /// - `Err(ErrorMarketplace::NoEsArbitro)` en caso contrario.
+        fn validar_rol_arbitro(&self) -> Result<(), ErrorMarketplace> {
+            if self.rol == Rol::Arbitro {
+                Ok(())
+            } else {
+                Err(ErrorMarketplace::NoEsArbitro)
+            }
+        }
 
         fn validar_cambio_rol(&self, nuevo_rol: &Rol) -> Result<(), ErrorMarketplace> {
             match self.rol {
-                Rol::Comprador | Rol::Vendedor => {
+                Rol::Comprador | Rol::Vendedor | Rol::Arbitro => {
                     if *nuevo_rol == Rol::Ambos {
                         Ok(())
                     } else {
@@ -459,7 +504,8 @@ mod market_place {
     /// - `calificacion_vendedor`: Calificación otorgada por el comprador al vendedor (si aplica).
     /// - `calificacion_comprador`: Calificación otorgada por el vendedor al comprador (si aplica).
     /// - `motivo_disputa`: Motivo de disputa si la orden está en disputa (si aplica).
-    ///
+    /// - `arbitro_asignado`: Cuenta del arbitro asignado a la orden (si aplica).
+    /// - `resolucion_disputa`: Resolución de la disputa (si aplica).
     #[derive(Debug, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
@@ -478,6 +524,8 @@ mod market_place {
         calificacion_vendedor: Option<u8>, // Calificación del comprador al vendedor
         calificacion_comprador: Option<u8>,
         motivo_disputa: Option<MotivoDisputa>,
+        arbitro_asignado: Option<AccountId>,
+        resolucion_disputa: Option<ResolucionDisputa>,
     }
 
     /// Representa el depósito de un vendedor para un producto específico.
@@ -545,6 +593,8 @@ mod market_place {
         ordenes: Mapping<u32, Orden>,             //id_orden -> Orden
         stock_general: Mapping<(AccountId, u32), Deposito>, // (id_vendedor, id_producto) -> Deposito
         productos_por_vendedor: Mapping<AccountId, Vec<u32>>, //Para que la busqueda sea mas facil, para id_vendedor -> Vec<id_producto> su propia lista de productos
+        tarjeta_credito: Mapping<AccountId, u128>, //id_usuario -> saldo en su tarjeta de credito
+        saldos_retenido: Mapping<u32, u128>, //id_orden -> saldo retenido por compras en curso
         //Atributos auxiliares
         contador_ordenes: u32,
         contador_publicacion: u32,
@@ -590,6 +640,8 @@ mod market_place {
                 calificacion_vendedor: None,
                 calificacion_comprador: None,
                 motivo_disputa: None,
+                arbitro_asignado: None,
+                resolucion_disputa: None,
             }
         }
         /// Marca la orden como enviada.
@@ -747,6 +799,41 @@ mod market_place {
             }
             Ok(())
         }
+
+        fn verificar_orden_en_disputa(&self) -> Result<(), ErrorMarketplace> {
+            if self.estado != EstadoOrden::EnDisputa {
+                return Err(ErrorMarketplace::OrdenNoEnDisputa);
+            }
+            Ok(())
+        }
+
+        fn validar_autorizacion_vendedor(&self, caller: AccountId) -> Result<(), ErrorMarketplace> {
+            if caller != self.vendedor {
+                return Err(ErrorMarketplace::NoAutorizado);
+            }
+            Ok(())
+        }
+
+        fn validar_autorizacion_comprador(
+            &self,
+            caller: AccountId,
+        ) -> Result<(), ErrorMarketplace> {
+            if caller != self.comprador {
+                return Err(ErrorMarketplace::NoAutorizado);
+            }
+            Ok(())
+        }
+
+        fn validar_autorizacion_arbitro(
+            &self,
+            caller: AccountId,
+        ) -> Result<(), ErrorMarketplace> {
+            match self.arbitro_asignado {
+                Some(arbitro) if arbitro == caller => Ok(()),
+                _ => Err(ErrorMarketplace::NoAutorizado),
+            }
+        }
+
     }
 
     impl MarketPlace {
@@ -760,6 +847,8 @@ mod market_place {
                 publicaciones: Mapping::default(),
                 stock_general: Mapping::default(),
                 productos_por_vendedor: Mapping::default(),
+                tarjeta_credito: Mapping::default(),
+                saldos_retenido: Mapping::default(),
                 contador_ordenes: 0,
                 contador_publicacion: 0,
                 contador_productos: 0,
@@ -909,6 +998,68 @@ mod market_place {
             Ok(())
         }
 
+        fn verificar_rol_arbitro(&self, id: AccountId) -> Result<(), ErrorMarketplace> {
+            let usuario = self.verificar_usuario_existe(id)?;
+            Usuario::validar_rol_arbitro(&usuario.rol)?;
+            Ok(())
+        }
+
+        fn reembolso(
+            &mut self,
+            id_orden: u32,
+            caller: AccountId,
+        ) -> Result<(), ErrorMarketplace> {
+            //obtener la orden
+            let mut orden = self
+                .ordenes
+                .get(&id_orden)
+                .ok_or(ErrorMarketplace::OrdenNoExiste)?;
+
+            //poner la orden en pendiente por las dudas
+            orden.estado = EstadoOrden::Pendiente;
+
+            self.ordenes.insert(id_orden, &orden);
+
+            // el comprador inicia la cancelación
+            orden.gestionar_cancelacion(caller)?;
+        }
+
+        fn match_resoluciones(
+            &mut self,
+            id_orden: u32,
+            motivo: MotivoDisputa,
+            resolucion: ResolucionDisputa,
+            orden: &mut Orden,
+        ) -> Result<(), ErrorMarketplace> {
+            match motivo {
+                MotivoDisputa::ProductoDefectuoso
+                | MotivoDisputa::ProductoNoRecibido
+                | MotivoDisputa::ProductoRecibidoNoCoincideDescripcion
+                | MotivoDisputa::FaltaDeProducto
+                | MotivoDisputa::ProductoIncorrecto => {
+                    match resolucion {
+                        ResolucionDisputa::ReenvioProducto | ResolucionDisputa::CambioProducto => {
+                            self.enviar_producto(id_orden, orden.id_publicacion, orden.cant_producto)?;
+                        }
+                        ResolucionDisputa::Reembolso => {
+                            self.reembolso(id_orden, orden.comprador)?;
+                        }
+                        ResolucionDisputa::Otro { .. } => {
+                            orden.estado = EstadoOrden::Resuelta;
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            orden.resolucion_disputa = Some(resolucion);
+
+            self.ordenes.insert(id_orden, &orden);
+
+            Ok(())
+        }
+
+
         //Helper para obtener una publicacion por id
         /// Devuelve la publicación asociada a un ID dado.
         ///
@@ -1030,6 +1181,22 @@ mod market_place {
             self.productos.insert(producto.id_producto, &producto);
             Ok(())
         }
+
+        fn validar_autorizacion_orden(
+            &self,
+            orden: &Orden,
+            caller: AccountId,
+        ) -> Result<(), ErrorMarketplace> {
+
+            if caller != orden.comprador
+                && caller != orden.vendedor
+                && Some(caller) != orden.arbitro_asignado
+            {
+                return Err(ErrorMarketplace::NoAutorizado);
+            }
+            Ok(())
+        }
+        
 
         /// Helper para insertar una publicación en el sistema.
         /// /// Inserta una publicación nueva en el sistema.
@@ -1483,11 +1650,11 @@ mod market_place {
             &mut self,
             id_publicacion: u32,
             cant_producto: u16,
-            monto_dado: u128,
+            forma_de_pago: FormaDePago,
         ) -> Result<(), ErrorMarketplace> {
             //monto dado es el monto que el comprador me da para pagar la orden
             let caller = self.env().caller();
-            self._crear_orden(caller, id_publicacion, cant_producto, monto_dado)?;
+            self._crear_orden(caller, id_publicacion, cant_producto, forma_de_pago)?;
             Ok(())
         }
 
@@ -1496,7 +1663,7 @@ mod market_place {
             id_comprador: AccountId,
             id_publicacion: u32,
             cant_producto: u16,
-            monto_dado: u128,
+            forma_de_pago: FormaDePago,
         ) -> Result<(), ErrorMarketplace> {
             // Verificar que el usuario exista
             self.verificar_usuario_existe(id_comprador)?;
@@ -1510,13 +1677,33 @@ mod market_place {
             // Verificar que el stock sea suficiente y asi poder crear la orden
             publicacion.verificar_stock(cant_producto as u32)?;
 
-            let tot_orden = match publicacion.precio.checked_mul(cant_producto as u128) {
-                Some(valor) => valor,
-                None => return Err(ErrorMarketplace::Overflow),
-            };
-            // Verificar que el monto dado sea suficiente para cubrir el total de la orden
-            if monto_dado < tot_orden {
-                return Err(ErrorMarketplace::MontoInsuficiente);
+            let tot_orden = publicacion
+                .precio
+                .checked_mul(cant_producto as u128)
+                .ok_or(ErrorMarketplace::Overflow)?;
+
+            // verificar forma de pago
+
+            match forma_de_pago {
+                FormaDePago::Efectivo { monto_dado } => {
+                    // Verificar que el monto dado sea suficiente para cubrir el total de la orden
+                    if monto_dado < tot_orden {
+                        return Err(ErrorMarketplace::MontoInsuficiente);
+                    }
+                }
+                FormaDePago::SaldoEnCuenta => {
+                    // debitar saldo del comprador
+                    self.debitar_saldo(caller, tot_orden)?;
+
+                    // verificar que no tenga fondos ya retenidos para esa orden
+                    let id_orden = self.contador_ordenes;
+                    if self.fondos_retenidos.contains(id_orden) {
+                        return Err(ErrorMarketplace::FondosYaRetenidos);
+                    }
+
+                    // retener fondos por orden
+                    self.fondos_retenidos.insert(id_orden, &tot_orden);
+                }
             }
 
             //Reducir el stock de la publicación, no del deposito
@@ -1534,6 +1721,7 @@ mod market_place {
 
             // Crear nueva orden
             let nueva_id = self.contador_ordenes;
+
             let orden = Orden::new(
                 nueva_id,
                 id_comprador,
@@ -1646,7 +1834,8 @@ mod market_place {
         /// 1. Obtiene la orden con el 'id_orden'.
         /// 2. Llama al método 'marcar_recibida' de la orden pasándole el 'caller'.
         /// 3. Si la operación es exitosa, actualiza la orden en el mapping.
-        ///
+        /// 4. Libera los fondos retenidos para el vendedor.
+        /// 
         /// # Retorna
         /// - 'Ok(())' si la orden fue marcada como recibida correctamente.
         /// - 'Err(ErrorMarketplace::OrdenNoExiste)' si no existe la orden con el 'id_orden' dado.
@@ -1660,6 +1849,7 @@ mod market_place {
                 match orden.marcar_recibida(caller) {
                     Ok(()) => {
                         self.ordenes.insert(id_orden, &orden);
+                        self.liberar_fondos_vendedor(id_orden)?;
                         Ok(())
                     }
                     Err(e) => Err(e),
@@ -1713,6 +1903,9 @@ mod market_place {
                     Ok(()) => {
                         // Guarda nuevamente la orden modificada en el Mapping para que persista en el contrato
                         self.ordenes.insert(id_orden, &orden);
+                        if let FormaDePago::SaldoEnCuenta = orden.forma_de_pago {
+                            self._acreditar_saldo(orden.id_comprador, orden.total_orden)?;
+                        }
                         Ok(())
                     }
                     Err(e) => Err(e),
@@ -1862,7 +2055,7 @@ mod market_place {
             }
         }
 
-        /// Abre una disputa para una orden dada con un motivo específico.
+        /// Abre una disputa por parte del comprador para una orden dada con un motivo específico.
         /// # Parámetros
         /// - '&mut self': referencia mutable al Marketplace.
         /// - 'id_orden: u32': identificador único de la orden.
@@ -1899,11 +2092,15 @@ mod market_place {
                 .get(id_orden)
                 .ok_or(ErrorMarketplace::OrdenNoExiste)?;
 
+            // verificar que el caller sea el comprador de la orden
+            orden.validar_autorizacion_comprador(caller)?;
+
             // verifico el estado de la orden
             orden.verificar_estado_disputa()?;
 
             // cambiar estado
             orden.estado = EstadoOrden::EnDisputa;
+
             orden.motivo_disputa = Some(motivo);
 
             // guardar cambios
@@ -1912,11 +2109,13 @@ mod market_place {
             Ok(())
         }
 
-        /// Resuelve una disputa para una orden dada con una resolución específica dada por el vendedor.
+        /// El vendedor resuelve una disputa para una orden dada con un motivo y resolución específicos.
         /// # Parámetros
         /// - '&mut self': referencia mutable al Marketplace.
         /// - 'id_orden: u32': identificador único de la orden.
+        /// - 'motivo: MotivoDisputa': motivo de la disputa.
         /// - 'resolucion: ResolucionDisputa': resolución de la disputa.
+        /// - 'decision: Decision': decisión del vendedor sobre la resolución. Puede ser 'Si' o 'No'.
         /// # Retorna
         /// - 'Ok(())' si la disputa fue resuelta exitosamente.
         /// - 'Err(ErrorMarketplace)' si ocurre un error en la validación o actualización.
@@ -1924,23 +2123,90 @@ mod market_place {
         pub fn resolver_disputa(
             &mut self,
             id_orden: u32,
-            resolucion: ResolucionDisputa,
+            motivo: MotivoDisputa,
+            resolucion: ResolucionDisputa,, decision: Decision
         ) -> Result<(), ErrorMarketplace> {
             let caller = self.env().caller();
-            self._resolver_disputa(caller, id_orden, resolucion)
+            self._resolver_disputa(caller, id_orden, motivo, resolucion, decision)
         }
 
         fn _resolver_disputa(
             &mut self,
             caller: AccountId,
             id_orden: u32,
+            motivo: MotivoDisputa,
             resolucion: ResolucionDisputa,
+            decision: Decision,
         ) -> Result<(), ErrorMarketplace> {
             // verificar que el usuario exista
             self.verificar_usuario_existe(caller)?;
 
-            //verificar que sea un comprador el que elija la resolucion
-            self.verificar_rol_comprador(caller)?;
+            //verificar que sea un vendedor
+            self.verificar_rol_vendedor(caller)?;
+
+            // verificar que la orden exista
+            let mut orden = self
+                .ordenes
+                .get(id_orden)
+                .ok_or(ErrorMarketplace::OrdenNoExiste)?;
+
+            // verificar que el caller sea el vendedor de la orden
+            orden.validar_autorizacion_vendedor(caller)?;
+
+            // verifico el estado de la orden
+            orden.verificar_orden_en_disputa()?;
+
+            match decision {
+                Decision::Si => {
+                    self.match_resoluciones(id_orden, motivo, resolucion, &mut orden)?;
+                }
+                Decision::No => {
+                    orden.estado = EstadoOrden::PendienteArbitro;
+                }
+            }
+
+            // Guardar cambios
+            self.ordenes.insert(id_orden, &orden);
+
+            Ok(())
+        }
+
+
+        /// El árbitro resuelve una disputa para una orden dada con un motivo y resolución específicos.
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'id_orden: u32': identificador único de la orden.
+        /// - 'motivo: MotivoDisputa': motivo de la disputa.
+        /// - 'resolucion: ResolucionDisputa': resolución de la disputa.
+        /// - 'decision: Decision': decisión del árbitro sobre la resolución. Puede ser 'Si' o 'No'.
+        /// # Retorna
+        /// - 'Ok(())' si la disputa fue resuelta exitosamente.
+        /// - 'Err(ErrorMarketplace)' si ocurre un error en la validación o actualización.
+        #[ink(message)]
+        pub fn resolver_motivo_disputa(
+            &mut self,
+            id_orden: u32,
+            motivo: MotivoDisputa,
+            resolucion: ResolucionDisputa, decision: Decision,
+        ) -> Result<(), ErrorMarketplace> {
+            let caller = self.env().caller();
+            self._resolver_motivo_disputa(caller, id_orden, motivo, resolucion, decision)
+        }
+
+        fn _resolver_motivo_disputa(
+            &mut self,
+            caller: AccountId,
+            id_orden: u32,
+            motivo: MotivoDisputa,
+            resolucion: ResolucionDisputa,
+            decision: Decision,
+        ) -> Result<(), ErrorMarketplace> {
+
+            //verificar que el usuario exista
+            self.verificar_usuario_existe(caller)?;
+
+            //verificar que sea un arbitro
+            self.verificar_rol_arbitro(caller)?;
 
             // verificar que la orden exista
             let mut orden = self
@@ -1949,35 +2215,136 @@ mod market_place {
                 .ok_or(ErrorMarketplace::OrdenNoExiste)?;
 
             // verifico el estado de la orden
-            if orden.estado != EstadoOrden::EnDisputa {
-                return Err(ErrorMarketplace::OrdenNoEnDisputa);
-            }
+            orden.verificar_orden_en_disputa()?;
 
-            // cambiar estado según resolución
-            match resolucion {
-                ResolucionDisputa::ReenvioProducto | ResolucionDisputa::CambioProducto => {
-                    self.enviar_producto(id_orden, orden.id_publicacion, orden.cant_producto)?;
-                }
-                ResolucionDisputa::Reembolso => {
-                    // poner la orden en pendiente por las dudas
-                    orden.estado = EstadoOrden::Pendiente;
-                    
-                    // guardar cambios antes de llamar a gestionar_cancelacion
-                    self.ordenes.insert(id_orden, &orden);
+            // guardar arbitro asignado
+            orden.arbitro_asignado = Some(caller);
 
-                    // el comprador inicia la cancelación
-                    orden.gestionar_cancelacion(caller)?;
+            match decision {
+                Decision::Si => {
+                    self.match_resoluciones(id_orden, motivo, resolucion, &mut orden)?;
                 }
-                ResolucionDisputa::Otro { descripcion: _ } => {
+                Decision::No => {
+                    // algo que yo elijo
                     orden.estado = EstadoOrden::Resuelta;
+                    orden.resolucion_disputa = Some(ResolucionDisputa::Reembolso);
+                    self.reembolso(id_orden, orden.comprador)?;
                 }
             }
 
-            // guardar cambios
+            // Guardar cambios
             self.ordenes.insert(id_orden, &orden);
 
             Ok(())
         }
+
+
+        /// Obtiene el resultado de una disputa para una orden dada.
+        /// # Parámetros
+        /// - '&self': referencia al Marketplace.
+        /// - 'id_orden: u32': identificador único de la orden.
+        /// # Retorna
+        /// - 'Ok((MotivoDisputa, ResolucionDisputa))' si la disputa fue resuelta exitosamente.
+        /// - 'Err(ErrorMarketplace)' si la orden no existe o la disputa no ha sido resuelta.
+        #[ink(message)]
+        pub fn resultado_disputa(&self, id_orden: u32) -> Result<(MotivoDisputa, ResolucionDisputa), ErrorMarketplace> {
+            let orden = self
+                .ordenes
+                .get(id_orden)
+                .ok_or(ErrorMarketplace::OrdenNoExiste)?;
+
+            if let (Some(motivo), Some(resolucion)) = (orden.motivo_disputa, orden.resolucion_disputa) {
+                Ok((motivo, resolucion))
+            } else {
+                Err(ErrorMarketplace::DisputaNoResuelta)
+            }
+        }
+
+
+        /// Acredita saldo a la tarjeta de crédito del usuario que llama a esta función.
+        /// # Parámetros
+        /// - '&mut self': referencia mutable al Marketplace.
+        /// - 'monto: u128': monto a acreditar.
+        /// # Retorna
+        /// - 'Ok(())' si el saldo fue acreditado exitosamente.
+        /// - 'Err(ErrorMarketplace)' si ocurre un error en la validación o actualización.
+        #[ink(message)]
+        pub fn acreditar_saldo(&mut self, monto: u128) -> Result<(), ErrorMarketplace> {
+            let caller = self.env().caller();
+            self._acreditar_saldo(caller, monto)
+        }
+
+        fn _acreditar_saldo(
+            &mut self,
+            usuario: AccountId,
+            monto: u128,
+        ) -> Result<(), ErrorMarketplace> {
+            // Verificar que el usuario exista
+            self.verificar_usuario_existe(usuario)?;
+
+            // Verificar que el monto sea válido
+            if monto == 0 {
+                return Err(ErrorMarketplace::MontoInvalido);
+            }
+
+            let saldo_actual = self.tarjeta_credito.get(usuario).unwrap_or(0);
+
+            let nuevo_saldo = saldo_actual
+                .checked_add(monto)
+                .ok_or(ErrorMarketplace::Overflow)?;
+
+            self.tarjeta_credito.insert(usuario, &nuevo_saldo);
+
+            Ok(())
+        }
+
+        fn debitar_saldo(
+            &mut self,
+            usuario: AccountId,
+            monto: u128,
+        ) -> Result<(), ErrorMarketplace> {
+            //verificar que el monto sea valido
+            if monto == 0 {
+                return Err(ErrorMarketplace::MontoInsuficiente);
+            }
+
+            let saldo_actual = self.tarjeta_credito.get(usuario).unwrap_or(0);
+
+            if saldo_actual < monto {
+                return Err(ErrorMarketplace::SaldoInsuficiente);
+            }
+
+            let nuevo_saldo = saldo_actual - monto;
+
+            self.tarjeta_credito.insert(usuario, &nuevo_saldo);
+
+            Ok(())
+        }
+
+        fn liberar_fondos_vendedor(
+            &mut self,
+            id_orden: u32,
+        ) -> Result<(), ErrorMarketplace> {
+            let orden = self
+                .ordenes
+                .get(id_orden)
+                .ok_or(ErrorMarketplace::OrdenNoExiste)?;
+
+            let monto = self
+                .fondos_retenidos
+                .get(id_orden)
+                .ok_or(ErrorMarketplace::FondosNoRetenidos)?;
+
+            // acreditar saldo al vendedor
+            self.acreditar_saldo(orden.vendedor, monto)?;
+
+            // eliminar fondos retenidos
+            self.fondos_retenidos.remove(id_orden);
+
+            Ok(())
+        }
+
+
 
         //Funciones del contrato 2
 
