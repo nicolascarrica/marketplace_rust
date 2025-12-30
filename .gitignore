@@ -17,5 +17,11 @@
 *.profraw
 tarpaulin-report.html
 
- 
+ # Coverage / build
+coverage/
+**/coverage/
+*.profraw
+*.d
+target/
+
  
