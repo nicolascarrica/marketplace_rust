@@ -53,7 +53,7 @@ pub mod market_place {
     /// # Variantes
     /// - `ReenvioProducto`: El vendedor envía otro producto.
     /// - `CambioProducto`: El vendedor ofrece un cambio por otro producto.
-    /// - `Reembolso`: El comprador devuelve el producto y recibe un reembolso.
+    /// - `Reembolso`: El comprador devuelve el producto y recibe un reembolso. Necesita la confirmacion del vendedor.
     /// - `Otro`: Resolución personalizada proporcionada por el vendedor.
     #[derive(Debug, Clone, PartialEq, Eq, ink::scale::Encode, ink::scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -180,6 +180,7 @@ pub mod market_place {
         FondosYaRetenidos,
         DisputaNoResuelta,
         SaldoInsuficiente,
+        OrdenNoEnPendienteArbitro,
 
     }
     // Structs
@@ -830,17 +831,6 @@ pub mod market_place {
             }
             Ok(())
         }
-
-        fn validar_autorizacion_arbitro(
-            &self,
-            caller: AccountId,
-        ) -> Result<(), ErrorMarketplace> {
-            match self.arbitro_asignado {
-                Some(arbitro) if arbitro == caller => Ok(()),
-                _ => Err(ErrorMarketplace::NoAutorizado),
-            }
-        }
-
     }
 
     impl MarketPlace {
@@ -1013,19 +1003,11 @@ pub mod market_place {
 
         fn reembolso(
             &mut self,
-            id_orden: u32,
             caller: AccountId,
+            orden: &mut Orden,
         ) -> Result<(), ErrorMarketplace> {
-            //obtener la orden
-            let mut orden = self
-                .ordenes
-                .get(&id_orden)
-                .ok_or(ErrorMarketplace::OrdenNoExiste)?;
-
             //poner la orden en pendiente por las dudas
             orden.estado = EstadoOrden::Pendiente;
-
-            self.ordenes.insert(id_orden, &orden);
 
             // el comprador inicia la cancelación
             orden.gestionar_cancelacion(caller)?;
@@ -1035,15 +1017,9 @@ pub mod market_place {
 
         fn match_resoluciones(
             &mut self,
-            id_orden: u32,
+            orden: &mut Orden,
             motivo: MotivoDisputa,
             resolucion: ResolucionDisputa) -> Result<(), ErrorMarketplace> {
-
-            let mut orden = self
-                .ordenes
-                .get(&id_orden)
-                .ok_or(ErrorMarketplace::OrdenNoExiste)?;
-
             match motivo {
                 MotivoDisputa::ProductoDefectuoso
                 | MotivoDisputa::ProductoNoRecibido
@@ -1052,10 +1028,10 @@ pub mod market_place {
                 | MotivoDisputa::ProductoIncorrecto => {
                     match resolucion {
                         ResolucionDisputa::ReenvioProducto | ResolucionDisputa::CambioProducto => {
-                            self.enviar_producto(id_orden, orden.cant_producto)?;
+                            self.enviar_producto(orden)?;
                         }
                         ResolucionDisputa::Reembolso => {
-                            self.reembolso(id_orden, orden.comprador)?;
+                            self.reembolso(orden.comprador, orden)?;
                         }
                         ResolucionDisputa::Otro { .. } => {
                             orden.estado = EstadoOrden::Resuelta;
@@ -1066,8 +1042,6 @@ pub mod market_place {
             }
 
             orden.resolucion_disputa = Some(resolucion);
-            
-            self.ordenes.insert(id_orden, &orden);
 
             Ok(())
         }
@@ -1194,23 +1168,7 @@ pub mod market_place {
             self.productos.insert(producto.id_producto, &producto);
             Ok(())
         }
-
-        fn validar_autorizacion_orden(
-            &self,
-            orden: &Orden,
-            caller: AccountId,
-        ) -> Result<(), ErrorMarketplace> {
-
-            if caller != orden.comprador
-                && caller != orden.vendedor
-                && Some(caller) != orden.arbitro_asignado
-            {
-                return Err(ErrorMarketplace::NoAutorizado);
-            }
-            Ok(())
-        }
         
-
         /// Helper para insertar una publicación en el sistema.
         /// /// Inserta una publicación nueva en el sistema.
         ///
@@ -1287,28 +1245,22 @@ pub mod market_place {
 
         fn enviar_producto(
             &mut self,
-            id_orden: u32,
-            cant_producto: u16,
+            orden: &mut Orden,
         ) -> Result<(), ErrorMarketplace> {
-            // Obtener la orden
-            let mut orden = self.ordenes.get(&id_orden)
-                .ok_or(ErrorMarketplace::OrdenNoExiste)?;
-
             // Verificar stock general del vendedor
             self.validar_stock_deposito(
                 orden.vendedor,
                 orden.id_producto,
-                cant_producto as u32,
+                orden.cant_producto as u32,
             )?;
 
-            // Marcar orden como enviada
-            orden.marcar_enviada(orden.vendedor)?;
+            orden.estado = EstadoOrden::Enviado;
 
             // Reducir stock del depósito del vendedor
             self.actualizar_stock_producto(
                 orden.vendedor,
                 orden.id_producto,
-                cant_producto as u32,
+                orden.cant_producto as u32,
             )?;
 
             Ok(())
@@ -2171,7 +2123,7 @@ pub mod market_place {
 
             match decision {
                 Decision::Valido => {
-                    self.match_resoluciones(id_orden, motivo, resolucion)?;
+                    self.match_resoluciones(&mut orden, motivo, resolucion)?;
                 }
                 Decision::NoValido => {
                     orden.estado = EstadoOrden::PendienteArbitro;
@@ -2227,21 +2179,23 @@ pub mod market_place {
                 .get(id_orden)
                 .ok_or(ErrorMarketplace::OrdenNoExiste)?;
 
-            // verifico el estado de la orden
-            orden.verificar_orden_en_disputa()?;
+            // verifico el estado de la orden en pendiente de arbitro
+            if orden.estado != EstadoOrden::PendienteArbitro {
+                return Err(ErrorMarketplace::OrdenNoEnPendienteArbitro);
+            }
 
             // guardar arbitro asignado
             orden.arbitro_asignado = Some(caller);
 
             match decision {
                 Decision::Valido => {
-                    self.match_resoluciones(id_orden, motivo, resolucion)?;
+                    self.match_resoluciones(&mut orden, motivo, resolucion)?;
                 }
                 Decision::NoValido => {
                     // algo que yo elijo
                     orden.estado = EstadoOrden::Resuelta;
                     orden.resolucion_disputa = Some(ResolucionDisputa::Reembolso);
-                    self.reembolso(id_orden, orden.comprador)?;
+                    self.reembolso(orden.comprador, &mut orden)?;
                 }
             }
 
@@ -2753,15 +2707,35 @@ pub mod market_place {
         fn test_marcar_orden_como_recibida_ok() {
             let mut contrato = contract_dummy();
 
-            let mut orden = Orden::new(1, account(1), account(2), 10, 3, 300);
+            let comprador=account(1);
+
+            let vendedor=account(2);
+
+            let monto= 300;
+
+            let mut orden = Orden::new(1, comprador, vendedor, 10, 3, monto);
             orden.estado = EstadoOrden::Enviado;
+
             contrato.ordenes.insert(1, &orden);
 
-            let res = contrato._marcar_orden_como_recibida(account(1), 1);
+            // SIMULAR fondos retenidos
+            contrato.saldos_retenidos.insert(1, &300);
+
+            // saldo unicial del vendedor
+            contrato.tarjeta_credito.insert(vendedor, &0u128);
+
+            let res = contrato._marcar_orden_como_recibida(comprador, 1);
             assert_eq!(res, Ok(()));
 
             let actualizada = contrato.ordenes.get(1).unwrap();
             assert_eq!(actualizada.estado, EstadoOrden::Recibido);
+
+            // Los fondos fueron liberados al vendedor
+            let saldo_vendedor = contrato.tarjeta_credito.get(vendedor).unwrap();
+            assert_eq!(saldo_vendedor, monto);
+
+            // verificar que se los fondos ya no existen
+            assert!(contrato.saldos_retenidos.get(1).is_none());
         }
 
         #[ink::test]
@@ -3395,8 +3369,6 @@ pub mod market_place {
             assert_eq!(result, Err(ErrorMarketplace::FondosYaRetenidos));
         }
 
-
-
         /// Tests Marketplace Helpers
         #[ink::test]
         fn test_validacion_producto_nombre_espacios() {
@@ -3535,12 +3507,12 @@ pub mod market_place {
         #[ink::test]
         fn test_verificar_usuario_existe_ok() {
             let mut contract = contract_dummy();
-            let usuario = Usuario::new("test".to_string(), Rol::Comprador, account(4));
-            set_caller(account(4));
+            let usuario = Usuario::new("test".to_string(), Rol::Comprador, account(5));
+            set_caller(account(5));
             let registrar_ok =
                 contract.registrar_usuario(usuario.username.clone(), usuario.rol.clone());
             assert_eq!(registrar_ok, Ok(()));
-            let res = contract.verificar_usuario_existe(account(4));
+            let res = contract.verificar_usuario_existe(account(5));
             assert_eq!(res, Ok(usuario));
         }
 
@@ -4365,6 +4337,33 @@ pub mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::EstadoInvalido));
         }
 
+        #[ink::test]
+        fn test_abrir_disputa_comprador_no_autorizado() {
+            let mut contract = contract_dummy();
+
+            let comprador_real = account(1);
+            let otro_comprador = account(3);
+            let vendedor = account(2);
+
+            // Crear orden cuya compradora NO es quien llama
+            let mut orden = Orden::new(0, comprador_real, vendedor, 1, 1, 100);
+            orden.estado = EstadoOrden::Pendiente; // estado válido para abrir disputa
+
+            contract.ordenes.insert(0, &orden);
+
+            // El caller es comprador, pero no el dueño de la orden
+            set_caller(otro_comprador);
+
+            let res = contract._abrir_disputa(
+                otro_comprador,
+                0,
+                MotivoDisputa::ProductoDefectuoso,
+            );
+
+            assert_eq!(res, Err(ErrorMarketplace::NoAutorizado));
+        }
+
+
         //TEST DE RESOLVER DISPUTA
         #[ink::test]
         fn test_resolver_disputa_vendedor_reenvio_producto() {
@@ -4378,6 +4377,12 @@ pub mod market_place {
 
             contract.ordenes.insert(0, &orden);
 
+            // crear deposito
+            let deposito = Deposito::new(1, vendedor, 10);
+            contract
+                .stock_general
+                .insert((vendedor, 1), &deposito);
+
             set_caller(vendedor);
 
             let res = contract._resolver_disputa(
@@ -4388,14 +4393,11 @@ pub mod market_place {
                 Decision::Valido,
             );
 
-            
-
             assert!(res.is_ok());
 
             let orden = contract.ordenes.get(0).unwrap();
             assert_eq!(orden.estado, EstadoOrden::Enviado);
         }
-
 
         #[ink::test]
         fn test_resolver_disputa_vendedor_cambio_producto() {
@@ -4408,6 +4410,12 @@ pub mod market_place {
             orden.estado = EstadoOrden::EnDisputa;
 
             contract.ordenes.insert(0, &orden);
+
+            // crear deposito
+            let deposito = Deposito::new(1, vendedor, 10);
+            contract
+                .stock_general
+                .insert((vendedor, 1), &deposito);
 
             set_caller(vendedor);
 
@@ -4424,7 +4432,6 @@ pub mod market_place {
             let orden = contract.ordenes.get(0).unwrap();
             assert_eq!(orden.estado, EstadoOrden::Enviado);
         }
-
 
         #[ink::test]
         fn test_resolver_disputa_vendedor_reembolso() {
@@ -4451,12 +4458,21 @@ pub mod market_place {
             assert!(res.is_ok());
 
             let orden = contract.ordenes.get(0).unwrap();
+
+            // Se guarda la resolución
             assert_eq!(
                 orden.resolucion_disputa,
                 Some(ResolucionDisputa::Reembolso)
             );
-        }
 
+            // El reembolso solo inicia la cancelación
+            assert_eq!(orden.estado, EstadoOrden::Pendiente);
+            assert!(orden.pendiente_cancelacion);
+            assert_eq!(
+                orden.cancelacion_solicitada_por,
+                Some(Rol::Comprador)
+            );
+        }
 
         #[ink::test]
         fn test_resolver_disputa_decision_no_valida_pendiente_arbitro() {
@@ -4547,7 +4563,7 @@ pub mod market_place {
 
             let comprador = account(1);
             let vendedor_real = account(2);
-            let otro_vendedor = account(4);
+            let otro_vendedor = account(3);
 
             let mut orden = Orden::new(0, comprador, vendedor_real, 1, 1, 100);
             orden.estado = EstadoOrden::EnDisputa;
@@ -4592,9 +4608,106 @@ pub mod market_place {
             assert_eq!(res, Err(ErrorMarketplace::OrdenNoEnDisputa));
         }
 
+        #[ink::test]
+        fn test_resolver_disputa_reembolso_y_vendedor_confirma_cancelacion() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            // Crear orden en disputa
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            orden.estado = EstadoOrden::EnDisputa;
+
+            contract.ordenes.insert(0, &orden);
+
+            // vendedor resuelve disputa → Reembolso
+            set_caller(vendedor);
+
+            let res = contract._resolver_disputa(
+                vendedor,
+                0,
+                MotivoDisputa::ProductoNoRecibido,
+                ResolucionDisputa::Reembolso,
+                Decision::Valido,
+            );
+
+            assert!(res.is_ok());
+
+            // La orden NO está cancelada aún
+            let orden = contract.ordenes.get(0).unwrap();
+            assert_eq!(orden.estado, EstadoOrden::Pendiente);
+            assert_eq!(
+                orden.resolucion_disputa,
+                Some(ResolucionDisputa::Reembolso)
+            );
+
+            // vendedor confirma la cancelación
+            set_caller(vendedor);
+
+            let res = contract._gestionar_cancelacion_orden(vendedor, 0);
+            assert!(res.is_ok());
+
+            // Orden definitivamente cancelada
+            let orden = contract.ordenes.get(0).unwrap();
+            assert_eq!(orden.estado, EstadoOrden::Cancelada);
+        }
+
+        //TEST RESULTADO DISPUTA
+        #[ink::test]
+        fn test_resultado_disputa_ok() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            orden.estado = EstadoOrden::Resuelta;
+            orden.motivo_disputa = Some(MotivoDisputa::ProductoNoRecibido);
+            orden.resolucion_disputa = Some(ResolucionDisputa::Reembolso);
+
+            contract.ordenes.insert(0, &orden);
+
+            let res = contract.resultado_disputa(0);
+
+            assert_eq!(
+                res,
+                Ok((
+                    MotivoDisputa::ProductoNoRecibido,
+                    ResolucionDisputa::Reembolso
+                ))
+            );
+        }
+
+        #[ink::test]
+        fn test_resultado_disputa_orden_no_existe() {
+            let contract = contract_dummy();
+
+            let res = contract.resultado_disputa(99);
+
+            assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
+        }
+
+        #[ink::test]
+        fn test_resultado_disputa_no_resuelta() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            orden.estado = EstadoOrden::EnDisputa;
+            orden.motivo_disputa = Some(MotivoDisputa::ProductoDefectuoso);
+            orden.resolucion_disputa = None;
+
+            contract.ordenes.insert(0, &orden);
+
+            let res = contract.resultado_disputa(0);
+
+            assert_eq!(res, Err(ErrorMarketplace::DisputaNoResuelta));
+        }
 
         // Tests de getters
-
         #[ink::test]
         fn test_get_cantidad_ordenes_inicial() {
             let contract = nuevo_contrato();
@@ -4714,6 +4827,477 @@ pub mod market_place {
             let contract = nuevo_contrato();
             assert_eq!(contract.get_producto(0), None);
         }
+
+        //TEST RESOLVER DISPUTA ARBITRO
+        #[ink::test]
+        fn test_resolver_motivo_disputa_arbitro_reenvio_producto() {
+            let mut contract = contract_dummy();
+
+            let arbitro = account(4);
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            orden.estado = EstadoOrden::PendienteArbitro;
+
+            contract.ordenes.insert(0, &orden);
+
+            // stock
+            let deposito = Deposito::new(1, vendedor, 10);
+            contract.stock_general.insert((vendedor, 1), &deposito);
+
+            set_caller(arbitro);
+
+            let res = contract._resolver_motivo_disputa(
+                arbitro,
+                0,
+                MotivoDisputa::ProductoDefectuoso,
+                ResolucionDisputa::ReenvioProducto,
+                Decision::Valido,
+            );
+
+            assert!(res.is_ok());
+
+            let orden = contract.ordenes.get(0).unwrap();
+            assert_eq!(orden.estado, EstadoOrden::Enviado);
+            assert_eq!(orden.arbitro_asignado, Some(arbitro));
+        }
+
+        #[ink::test]
+        fn test_resolver_motivo_disputa_arbitro_cambio_producto() {
+            let mut contract = contract_dummy();
+
+            let arbitro = account(4);
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 2, 200);
+            orden.estado = EstadoOrden::PendienteArbitro;
+
+            contract.ordenes.insert(0, &orden);
+
+            let deposito = Deposito::new(1, vendedor, 10);
+            contract.stock_general.insert((vendedor, 1), &deposito);
+
+            set_caller(arbitro);
+
+            let res = contract._resolver_motivo_disputa(
+                arbitro,
+                0,
+                MotivoDisputa::ProductoIncorrecto,
+                ResolucionDisputa::CambioProducto,
+                Decision::Valido,
+            );
+
+            assert!(res.is_ok());
+
+            let orden = contract.ordenes.get(0).unwrap();
+            assert_eq!(orden.estado, EstadoOrden::Enviado);
+        }
+
+        #[ink::test]
+        fn test_resolver_motivo_disputa_arbitro_reembolso() {
+            let mut contract = contract_dummy();
+
+            let arbitro = account(4);
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 1, 150);
+            orden.estado = EstadoOrden::PendienteArbitro;
+
+            contract.ordenes.insert(0, &orden);
+
+            set_caller(arbitro);
+
+            let res = contract._resolver_motivo_disputa(
+                arbitro,
+                0,
+                MotivoDisputa::ProductoNoRecibido,
+                ResolucionDisputa::Reembolso,
+                Decision::Valido,
+            );
+
+            assert!(res.is_ok());
+
+            let orden = contract.ordenes.get(0).unwrap();
+            assert_eq!(
+                orden.resolucion_disputa,
+                Some(ResolucionDisputa::Reembolso)
+            );
+            assert_eq!(orden.estado, EstadoOrden::Pendiente);
+            assert!(orden.pendiente_cancelacion);
+        }
+
+        #[ink::test]
+        fn test_resolver_motivo_disputa_arbitro_decision_no_valida() {
+            let mut contract = contract_dummy();
+
+            let arbitro = account(4);
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            orden.estado = EstadoOrden::PendienteArbitro;
+
+            contract.ordenes.insert(0, &orden);
+
+            set_caller(arbitro);
+
+            let res = contract._resolver_motivo_disputa(
+                arbitro,
+                0,
+                MotivoDisputa::ProductoDefectuoso,
+                ResolucionDisputa::ReenvioProducto, // se ignora porque se fuerza el reembolso
+                Decision::NoValido,
+            );
+
+            assert!(res.is_ok());
+
+            let orden = contract.ordenes.get(0).unwrap();
+            assert_eq!(orden.estado, EstadoOrden::Pendiente);
+            assert_eq!(
+                orden.resolucion_disputa,
+                Some(ResolucionDisputa::Reembolso)
+            );
+        }
+
+        #[ink::test]
+        fn test_resolver_motivo_disputa_no_es_arbitro() {
+            let mut contract = contract_dummy();
+
+            let vendedor = account(2);
+            set_caller(vendedor);
+
+            let res = contract._resolver_motivo_disputa(
+                vendedor,
+                0,
+                MotivoDisputa::ProductoDefectuoso,
+                ResolucionDisputa::Reembolso,
+                Decision::Valido,
+            );
+
+            assert_eq!(res, Err(ErrorMarketplace::NoEsArbitro));
+        }
+
+        #[ink::test]
+        fn test_resolver_motivo_disputa_orden_no_en_pendiente_arbitro() {
+            let mut contract = contract_dummy();
+
+            let arbitro = account(4);
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            orden.estado = EstadoOrden::Enviado;
+
+            contract.ordenes.insert(0, &orden);
+
+            set_caller(arbitro);
+
+            let res = contract._resolver_motivo_disputa(
+                arbitro,
+                0,
+                MotivoDisputa::ProductoDefectuoso,
+                ResolucionDisputa::Reembolso,
+                Decision::Valido,
+            );
+
+            assert_eq!(res, Err(ErrorMarketplace::OrdenNoEnPendienteArbitro));
+        }
+
+        #[ink::test]
+        fn test_arbitro_reembolso_y_vendedor_confirma_cancelacion() {
+            let mut contract = contract_dummy();
+
+            let arbitro = account(4);
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            // Orden pendiente de arbitraje
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            orden.estado = EstadoOrden::PendienteArbitro;
+
+            contract.ordenes.insert(0, &orden);
+
+            // arbitro resuelve con reembolso
+            set_caller(arbitro);
+
+            let res = contract._resolver_motivo_disputa(
+                arbitro,
+                0,
+                MotivoDisputa::ProductoNoRecibido,
+                ResolucionDisputa::Reembolso,
+                Decision::Valido,
+            );
+
+            assert!(res.is_ok());
+
+            // obtener la orden luego del arbitraje
+            let orden = contract.ordenes.get(0).unwrap();
+
+            assert_eq!(
+                orden.resolucion_disputa,
+                Some(ResolucionDisputa::Reembolso)
+            );
+
+            // La orden NO está cancelada aún
+            assert_eq!(orden.estado, EstadoOrden::Pendiente);
+
+            // La cancelación fue iniciada por el comprador
+            assert!(orden.pendiente_cancelacion);
+            assert_eq!(
+                orden.cancelacion_solicitada_por,
+                Some(Rol::Comprador)
+            );
+
+            // Vendedor confirma la cancelación 
+            set_caller(vendedor);
+
+            let res = contract._gestionar_cancelacion_orden(vendedor, 0);
+            assert!(res.is_ok());
+
+            // Orden definitivamente cancelada
+            let orden = contract.ordenes.get(0).unwrap();
+            assert_eq!(orden.estado, EstadoOrden::Cancelada);
+        }
+
+        //TEST ACREDITAR SALDO
+        #[ink::test]
+        fn test_acreditar_saldo_ok() {
+            let mut contract = contract_dummy();
+
+            let usuario = account(1);
+
+            let res = contract._acreditar_saldo(usuario, 100);
+            assert!(res.is_ok());
+
+            let saldo = contract.tarjeta_credito.get(usuario).unwrap();
+            assert_eq!(saldo, 100);
+        }
+
+        #[ink::test]
+        fn test_acreditar_saldo_monto_insuficiente() {
+            let mut contract = contract_dummy();
+
+            let usuario = account(1);
+
+            let res = contract._acreditar_saldo(usuario, 0);
+            assert_eq!(res, Err(ErrorMarketplace::MontoInsuficiente));
+        }
+
+        #[ink::test]
+        fn test_acreditar_saldo_usuario_no_existe() {
+            let mut contract = contract_dummy();
+
+            let usuario = account(99);
+
+            let res = contract._acreditar_saldo(usuario, 100);
+            assert_eq!(res, Err(ErrorMarketplace::UsuarioNoExiste));
+        }
+
+        #[ink::test]
+        fn test_acreditar_saldo_overflow() {
+            let mut contract = contract_dummy();
+
+            let usuario = account(1);
+
+            // Forzar saldo al máximo
+            contract.tarjeta_credito.insert(usuario, &u128::MAX);
+
+            // Intentar acreditar cualquier monto > 0
+            let res = contract._acreditar_saldo(usuario, 1);
+
+            assert_eq!(res, Err(ErrorMarketplace::Overflow));
+        }
+
+        //TEST DEBITAR SALDO
+        #[ink::test]
+        fn test_debitar_saldo_ok() {
+            let mut contract = contract_dummy();
+
+            let usuario = account(1);
+            contract.tarjeta_credito.insert(usuario, &200);
+
+            let res = contract.debitar_saldo(usuario, 150);
+            assert!(res.is_ok());
+
+            let saldo = contract.tarjeta_credito.get(usuario).unwrap();
+            assert_eq!(saldo, 50);
+        }
+
+        #[ink::test]
+        fn test_debitar_saldo_monto_insuficiente() {
+            let mut contract = contract_dummy();
+
+            let usuario = account(1);
+            contract.tarjeta_credito.insert(usuario, &100);
+
+            let res = contract.debitar_saldo(usuario, 0);
+            assert_eq!(res, Err(ErrorMarketplace::MontoInsuficiente));
+        }
+
+        #[ink::test]
+        fn test_debitar_saldo_saldo_insuficiente() {
+            let mut contract = contract_dummy();
+
+            let usuario = account(1);
+            contract.tarjeta_credito.insert(usuario, &50);
+
+            let res = contract.debitar_saldo(usuario, 100);
+            assert_eq!(res, Err(ErrorMarketplace::SaldoInsuficiente));
+        }
+
+        //TEST LIBERAR FONDOS
+        #[ink::test]
+        fn test_liberar_fondos_vendedor_ok() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            // Crear orden
+            let orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            contract.ordenes.insert(0, &orden);
+
+            // Simular fondos retenidos
+            contract.saldos_retenidos.insert(0, &50);
+
+            // Acreditar saldo al vendedor
+            let res = contract.liberar_fondos_vendedor(0);
+            assert!(res.is_ok());
+
+            // Comprobar que el saldo del vendedor se actualizó
+            assert_eq!(contract.tarjeta_credito.get(vendedor), Some(50));
+
+            // Comprobar que los fondos retenidos se eliminaron
+            assert_eq!(contract.saldos_retenidos.get(0), None);
+        }
+
+        #[ink::test]
+        fn test_liberar_fondos_vendedor_orden_no_existe() {
+            let mut contract = contract_dummy();
+
+            let res = contract.liberar_fondos_vendedor(99);
+
+            assert_eq!(res, Err(ErrorMarketplace::OrdenNoExiste));
+        }
+
+        #[ink::test]
+        fn test_liberar_fondos_vendedor_fondos_no_retenidos() {
+            let mut contract = contract_dummy();
+
+            let vendedor = account(2);
+            let comprador = account(1);
+
+            let orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            contract.ordenes.insert(0, &orden);
+
+            let res = contract.liberar_fondos_vendedor(0);
+
+            assert_eq!(res, Err(ErrorMarketplace::FondosNoRetenidos));
+        }
+
+        //MAS TESTS
+        #[ink::test]
+        fn test_match_resoluciones_otro_cambia_estado_resuelta() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            orden.estado = EstadoOrden::EnDisputa;
+
+            let res = contract.match_resoluciones(
+                &mut orden,
+                MotivoDisputa::ProductoDefectuoso,
+                ResolucionDisputa::Otro {
+                    descripcion: "Acuerdo entre partes".to_string(),
+                },
+            );
+
+            assert!(res.is_ok());
+            assert_eq!(orden.estado, EstadoOrden::Resuelta);
+            assert_eq!(
+                orden.resolucion_disputa,
+                Some(ResolucionDisputa::Otro {
+                    descripcion: "Acuerdo entre partes".to_string(),
+                })
+            );
+        }
+
+        #[ink::test]
+        fn test_match_resoluciones_motivo_no_contemplado_no_cambia_estado() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+            let vendedor = account(2);
+
+            let mut orden = Orden::new(0, comprador, vendedor, 1, 1, 100);
+            orden.estado = EstadoOrden::EnDisputa;
+
+            let estado_original = orden.estado.clone();
+
+            let res = contract.match_resoluciones(
+                &mut orden,
+                MotivoDisputa::Otro{
+            descripcion: "Acuerdo entre partes".to_string(),
+        },
+                ResolucionDisputa::Reembolso,
+            );
+
+            assert!(res.is_ok());
+
+            // Estado NO cambia
+            assert_eq!(orden.estado, estado_original);
+
+            // Pero la resolución sí se guarda
+            assert_eq!(
+                orden.resolucion_disputa,
+                Some(ResolucionDisputa::Reembolso)
+            );
+        }
+
+        #[ink::test]
+        fn test_gestionar_cancelacion_acredita_saldo_en_cuenta() {
+            let mut contract = contract_dummy();
+
+            let comprador = account(1);
+            let vendedor = account(2);
+            let id_orden = 0;
+            let total = 100;
+
+            // Crear orden en estado Pendiente
+            let mut orden = Orden::new(id_orden, comprador, vendedor, 1, 1, total);
+            orden.estado = EstadoOrden::Pendiente;
+
+            // Cancelación ya iniciada por el comprador
+            orden.pendiente_cancelacion = true;
+            orden.cancelacion_solicitada_por = Some(Rol::Comprador);
+
+            orden.forma_de_pago = Some(FormaDePago::SaldoEnCuenta);
+
+            contract.ordenes.insert(id_orden, &orden);
+
+            // Saldo inicial del comprador
+            contract.tarjeta_credito.insert(comprador, &0);
+
+            // El vendedor confirma la cancelación
+            set_caller(vendedor);
+
+            let res = contract._gestionar_cancelacion_orden(vendedor, id_orden);
+            assert!(res.is_ok());
+
+            // Orden cancelada
+            let orden = contract.ordenes.get(id_orden).unwrap();
+            assert_eq!(orden.estado, EstadoOrden::Cancelada);
+
+            // Se acreditó el saldo al comprador
+            let saldo = contract.tarjeta_credito.get(comprador).unwrap();
+            assert_eq!(saldo, total);
+        }
+
     }
 }
 
