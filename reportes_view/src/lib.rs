@@ -205,7 +205,6 @@ mod reportes_view {
                                 .checked_div(cant_calif)
                                 .unwrap_or(0);
 
-                            // suma segura
                             suma_reputacion = suma_reputacion
                                 .checked_add(promedio_vendedor)
                                 .unwrap_or(suma_reputacion);
