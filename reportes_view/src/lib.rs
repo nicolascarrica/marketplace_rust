@@ -8,8 +8,6 @@ mod reportes_view {
     use ink::prelude::collections::BTreeMap;
     use marketplace::market_place::MarketPlaceRef;
     use marketplace::market_place::Categoria;
-    use marketplace::market_place::Orden;
-    use marketplace::market_place::Producto;
     use marketplace::market_place::EstadoOrden;
 
     #[ink(storage)]
