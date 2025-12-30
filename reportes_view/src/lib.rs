@@ -8,8 +8,6 @@ mod reportes_view {
     use ink::prelude::collections::BTreeMap;
     use marketplace::market_place::MarketPlaceRef;
     use marketplace::market_place::Categoria;
-    use marketplace::market_place::Orden;
-    use marketplace::market_place::Producto;
     use marketplace::market_place::EstadoOrden;
 
     #[ink(storage)]
@@ -205,7 +203,6 @@ mod reportes_view {
                                 .checked_div(cant_calif)
                                 .unwrap_or(0);
 
-                            // suma segura
                             suma_reputacion = suma_reputacion
                                 .checked_add(promedio_vendedor)
                                 .unwrap_or(suma_reputacion);
