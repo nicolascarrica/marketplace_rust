@@ -2502,11 +2502,9 @@ pub mod market_place {
 
             let saldo_actual = self.tarjeta_credito.get(usuario).unwrap_or(0);
 
-            if saldo_actual < monto {
-                return Err(ErrorMarketplace::SaldoInsuficiente);
-            }
-
-            let nuevo_saldo = saldo_actual - monto;
+            let nuevo_saldo = saldo_actual
+                .checked_sub(monto)
+                .ok_or(ErrorMarketplace::SaldoInsuficiente)?;
 
             self.tarjeta_credito.insert(usuario, &nuevo_saldo);
 
