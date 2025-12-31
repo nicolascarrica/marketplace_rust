@@ -1952,7 +1952,9 @@ pub mod market_place {
                 match orden.marcar_recibida(caller) {
                     Ok(()) => {
                         self.ordenes.insert(id_orden, &orden);
-                        self.liberar_fondos_vendedor(id_orden)?;
+                        if let Some(FormaDePago::SaldoEnCuenta) = orden.forma_de_pago {
+                            self.liberar_fondos_vendedor(id_orden)?;
+                        }
                         Ok(())
                     }
                     Err(e) => Err(e),
@@ -2950,6 +2952,9 @@ pub mod market_place {
 
             let mut orden = Orden::new(1, comprador, vendedor, 10, 3, monto);
             orden.estado = EstadoOrden::Enviado;
+
+            // Setear forma de pago para que se liberen fondos
+            orden.forma_de_pago = Some(FormaDePago::SaldoEnCuenta);
 
             contrato.ordenes.insert(1, &orden);
 
@@ -5359,6 +5364,9 @@ pub mod market_place {
 
             // Estado necesario para poder marcar como recibida
             orden.estado = EstadoOrden::Enviado;
+
+            // Setear forma de pago a SaldoEnCuenta para que se liberen los fondos
+            orden.forma_de_pago = Some(FormaDePago::SaldoEnCuenta);
 
             contract.ordenes.insert(id_orden, &orden);
 
